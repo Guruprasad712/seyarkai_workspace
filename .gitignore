@@ -150,7 +150,7 @@ activemq-data/
 # Environments
 .env
 .envrc
-.venv
+.venv/
 env/
 venv/
 ENV/
@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project-specific secrets and build artifacts
+.env.*
+!.env.example
+*-key.json
+node_modules/
+.next/
+*.pyc
+scratch/
