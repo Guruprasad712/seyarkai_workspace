@@ -150,7 +150,7 @@ activemq-data/
 # Environments
 .env
 .envrc
-.venv
+.venv/
 env/
 venv/
 ENV/
@@ -216,3 +216,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# frontend/lib/ must not be caught by the lib/ Python packaging rule above
+!frontend/lib/
+
+# Project-specific secrets and build artifacts
+.env.*
+!.env.example
+*-key.json
+node_modules/
+.next/
+*.pyc
+scratch/

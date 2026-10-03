@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: seyarkai_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run migrations
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/seyarkai_test
+        run: alembic upgrade head
+
+      - name: Run tests
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/seyarkai_test
+          TEST_DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/seyarkai_test
+          JWT_SECRET: ci-only-not-a-real-secret
+        run: pytest -v
+
+  docker-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build ./backend -f backend/Dockerfile -t seyarkai-backend:ci
+
+      - name: Build frontend image
+        run: >
+          docker build ./frontend
+          -f frontend/Dockerfile
+          -t seyarkai-frontend:ci
+          --build-arg NEXT_PUBLIC_API_URL=http://localhost:8000
