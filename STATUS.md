@@ -19,8 +19,8 @@ Date: 2026-10-02   Region: us-central1
 - [ ] Local: gcloud + ADC, Node 20+
 - [ ] Docs committed (CLAUDE.md, ARCHITECTURE.md, CONTRACTS.md, KNOWN_LIMITATIONS.md)
 - [x] Backend scaffold, single migration (17 tables), /health 200, pytest green (2/2)
-- [ ] Frontend shell showing backend health
-- [ ] CI: pytest + docker build of both images
+- [x] Frontend shell showing backend health
+- [x] CI: pytest + docker build of both images (backend/Dockerfile, frontend/Dockerfile, .github/workflows/ci.yml)
 
 ### Next
 Day 2 — Gemini + ADK spike in scratch/, then app/runtime and the knowledge MCP server.
