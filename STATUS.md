@@ -15,9 +15,10 @@ Date: 2026-10-02   Region: us-central1
 - [x] Cloud SQL seyarkai-db RUNNABLE; db + appuser created (connection test via gcloud sql connect not run)
 - [x] Vertex AI Search data store created; test document searchable
 - [x] Service accounts backend-runtime, docs-generator; Artifact Registry repo
-- [ ] Local: gcloud + ADC, Postgres 16 `seyarkai_dev`, Python 3.11, Node 20+, .env
+- [x] Local: Postgres 16 `seyarkai_dev` + `seyarkai_test`, Python 3.11, .env populated
+- [ ] Local: gcloud + ADC, Node 20+
 - [ ] Docs committed (CLAUDE.md, ARCHITECTURE.md, CONTRACTS.md, KNOWN_LIMITATIONS.md)
-- [ ] Backend scaffold, single migration (17 tables), /health 200, pytest green
+- [x] Backend scaffold, single migration (17 tables), /health 200, pytest green (2/2)
 - [ ] Frontend shell showing backend health
 - [ ] CI: pytest + docker build of both images
 

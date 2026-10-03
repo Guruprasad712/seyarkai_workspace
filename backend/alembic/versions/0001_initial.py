@@ -8,6 +8,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects.postgresql import JSONB
 
 revision: str = "0001"
 down_revision: Union[str, None] = None
@@ -58,7 +59,7 @@ def upgrade() -> None:
         sa.Column("agent_id", sa.UUID(), nullable=False),
         sa.Column("version", sa.VARCHAR(), nullable=False),
         sa.Column("instructions", sa.TEXT(), nullable=False),
-        sa.Column("capabilities", sa.JSON(), nullable=False),
+        sa.Column("capabilities", JSONB(), nullable=False),
         sa.Column("status", sa.VARCHAR(), nullable=False),
         sa.Column("published_at", sa.TIMESTAMP(timezone=True), nullable=True),
         sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False,
@@ -266,7 +267,7 @@ def upgrade() -> None:
         sa.Column("event_type", sa.VARCHAR(), nullable=False),
         sa.Column("actor_type", sa.VARCHAR(), nullable=False),
         sa.Column("actor_id", sa.UUID(), nullable=True),
-        sa.Column("payload", sa.JSON(), nullable=False),
+        sa.Column("payload", JSONB(), nullable=False),
         sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False,
                   server_default=sa.text("now()")),
         sa.ForeignKeyConstraint(["execution_id"], ["executions.id"]),
@@ -310,7 +311,7 @@ def upgrade() -> None:
         sa.Column("responded_by", sa.UUID(), nullable=False),
         sa.Column("decision", sa.VARCHAR(), nullable=False),
         sa.Column("comment", sa.TEXT(), nullable=True),
-        sa.Column("input", sa.JSON(), nullable=True),
+        sa.Column("input", JSONB(), nullable=True),
         sa.Column("created_at", sa.TIMESTAMP(timezone=True), nullable=False,
                   server_default=sa.text("now()")),
         sa.Column("updated_at", sa.TIMESTAMP(timezone=True), nullable=False,

@@ -9,15 +9,24 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Import Base so Alembic can see the metadata (populated by the migration itself)
-from app.core.db import Base  # noqa: E402
-
-target_metadata = Base.metadata
+target_metadata = None
 
 
 def get_url() -> str:
-    from app.core.config import settings
-    return settings.DATABASE_URL
+    import os
+    from pathlib import Path
+    from dotenv import load_dotenv
+
+    # Load repo-root .env so alembic CLI picks up DATABASE_URL without a shell export
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL is not set. Add it to the repo-root .env file:\n"
+            "  DATABASE_URL=postgresql+asyncpg://user:pw@localhost:5432/seyarkai_dev"
+        )
+    return url
 
 
 def run_migrations_offline() -> None:
