@@ -35,7 +35,10 @@ def _unwrap_function_response(resp: Any) -> str:
         raw = sc.get("result") if wrap else sc
         return str(raw)[:500]
 
-    # ADK agent-call shape: {"result": value} with no other MCP keys
+    # ADK agent-call shape: {"result": value} with no other MCP keys.
+    # Covers any sub-agent tool (e.g. GoogleSearchAgentTool).
+    # google_search is deferred from the MVP catalog — this branch is generic and
+    # will activate automatically if/when google_search is enabled.
     if "result" in resp and "content" not in resp and "meta" not in resp:
         return str(resp["result"])[:500]
 

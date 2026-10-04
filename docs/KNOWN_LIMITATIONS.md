@@ -16,3 +16,4 @@ version would do.
 | 9 | Cloud SQL uses a shared-core tier (db-f1-micro) | Lowest cost for a demo | Dedicated-core tier sized to load |
 | 10 | Cloud SQL backups are disabled | Saves cost; data is seed/demo data | Automated backups and point-in-time recovery |
 | 11 | Cloud SQL has a public IP with no authorized networks (access by IAM through the connector only) | Simplest connection path for Cloud Run | Private IP with VPC connector |
+| 12 | `GEMINI_API_KEY` is stored in Secret Manager but the key is not funded — live runtime uses `GOOGLE_GENAI_USE_VERTEXAI=1` with ADC/service account; the AI Studio key path is an untested fallback | Vertex AI is the real auth path; keeping the key avoids a cold-start error if ADC fails | Fund the AI Studio key or remove it; always use Vertex AI in production |

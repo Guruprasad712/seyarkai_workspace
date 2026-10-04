@@ -222,6 +222,11 @@ def test_non_final_text_skipped():
 # spike4: google_search sub-agent (GoogleSearchAgentTool) shapes
 # Confirmed live 2026-10-04: function_call.name='google_search_agent',
 # function_response.response={'result': '<answer>'}
+#
+# NOTE: google_search is deferred from the MVP catalog (see docs/ADK_NOTES.md).
+# These tests exercise the generic ADK agent-call branch in _unwrap_function_response,
+# which also covers any future sub-agent tool. They are kept because they pass and
+# document the confirmed event shapes.
 # ---------------------------------------------------------------------------
 
 def test_google_search_agent_tool_called():

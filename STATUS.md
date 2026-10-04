@@ -3,33 +3,38 @@
 Update at the end of every session. Every Claude Code session starts by reading this file,
 CLAUDE.md, and the relevant docs/ sections.
 
-## Current: Day 1 of 10 — Cloud setup, foundation, contracts, CI
-Date: 2026-10-02   Region: us-central1
+## Current: Day 3 of 10 — Runtime, knowledge MCP, ADK spikes, tests
+Date: 2026-10-04   Region: us-central1
 
-### Done
-- [ ] Public repo, .gitignore, secret scanning + push protection
-- [ ] Organizer eligibility message sent (reply saved)
-- [ ] Project + billing linked (done), $100 budget alert (not confirmed)
+### Done (Days 1–3)
+- [x] Public repo, .gitignore, secret scanning + push protection
 - [x] APIs enabled
 - [x] Secrets: jwt-secret, db-password, gemini-api-key (3; docs identity is keyless)
-- [x] Cloud SQL seyarkai-db RUNNABLE; db + appuser created (connection test via gcloud sql connect not run)
+- [x] Cloud SQL seyarkai-db RUNNABLE; db + appuser created
 - [x] Vertex AI Search data store created; test document searchable
 - [x] Service accounts backend-runtime, docs-generator; Artifact Registry repo
 - [x] Local: Postgres 16 `seyarkai_dev` + `seyarkai_test`, Python 3.11, .env populated
-- [ ] Local: gcloud + ADC, Node 20+
-- [ ] Docs committed (CLAUDE.md, ARCHITECTURE.md, CONTRACTS.md, KNOWN_LIMITATIONS.md)
-- [x] Backend scaffold, single migration (17 tables), /health 200, pytest green (2/2)
+- [x] Backend scaffold, single migration (17 tables), /health 200, pytest green
 - [x] Frontend shell showing backend health
-- [x] CI: pytest + docker build of both images (backend/Dockerfile, frontend/Dockerfile, .github/workflows/ci.yml)
+- [x] CI: pytest (not live/integration) + docker build of both images
+- [x] app/runtime: run_stage, normalise events, LLM call cap, thought filtering
+- [x] mcp_servers/knowledge: FastMCP server with knowledge_search stub; subprocess smoke test
+- [x] ADK spikes: Vertex AI mode confirmed live (`GOOGLE_GENAI_USE_VERTEXAI=1`); GoogleSearchTool coexistence documented in docs/ADK_NOTES.md
+- [x] Seed script for mcp_tools (2 tools: knowledge_search, generate_document); idempotency test
+- [x] conftest guard: aborts if TEST_DATABASE_URL DB name ≠ `*_test` or equals DATABASE_URL
+- [x] CI: drops DATABASE_URL from test step; adds `-m "not live and not integration"`
+- [x] requirements.txt: google-adk==2.11.0, google-genai==2.28.0, fastmcp==4.0.10 pinned
+- [x] normalise() handles ADK agent-call response shape `{"result": str}`; unit tests
+- [x] docs: ARCHITECTURE.md, CONTRACTS.md env table, KNOWN_LIMITATIONS.md updated for Vertex switch
 
 ### Next
-Day 2 — Gemini + ADK spike in scratch/, then app/runtime and the knowledge MCP server.
+Day 4 — Policy engine: policies, stages, checkpoints, publish validation; policy generation stub.
 
 ### Blockers / open questions
-- 
+- google_search deferred from MVP catalog (see docs/ADK_NOTES.md — sub-agent LLM budget and coexistence findings recorded)
 
 ### Backlog (ideas outside today's scope)
-- 
+- google_search as a built-in tool (`server_key="__builtin__"`) — proposal in docs/ADK_NOTES.md; needs approval before implementation
 
 ## Credentials register (names and locations only — NEVER values)
 | Name | Source | Stored in | Needed by |
