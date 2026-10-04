@@ -44,10 +44,9 @@ jobs:
       - name: Run tests
         working-directory: backend
         env:
-          DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/seyarkai_test
           TEST_DATABASE_URL: postgresql+asyncpg://ci:ci@localhost:5432/seyarkai_test
           JWT_SECRET: ci-only-not-a-real-secret
-        run: pytest -v
+        run: pytest -m "not live and not integration" -v
 
   docker-build:
     runs-on: ubuntu-latest

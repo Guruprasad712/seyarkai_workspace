@@ -13,12 +13,16 @@ from typing import Any
 
 
 def _unwrap_function_response(resp: Any) -> str:
-    """Extract a summary string from a FastMCP / MCP function_response payload.
+    """Extract a summary string from a function_response payload.
 
     FastMCP shapes (confirmed from source, fastmcp 4.0.10):
     - dict return  → structured_content = the dict itself (no wrap)
     - non-dict return with x-fastmcp-wrap-result → structured_content = {"result": value}
                                                      meta.fastmcp.wrap_result = True
+
+    ADK agent-call shape (e.g. GoogleSearchAgentTool, spike4):
+    - {"result": "<answer string>"}  — no structuredContent, no meta, no content
+
     Fallback: content[0].text
     """
     if not isinstance(resp, dict):
@@ -30,6 +34,10 @@ def _unwrap_function_response(resp: Any) -> str:
         wrap = (meta.get("fastmcp") or {}).get("wrap_result", False)
         raw = sc.get("result") if wrap else sc
         return str(raw)[:500]
+
+    # ADK agent-call shape: {"result": value} with no other MCP keys
+    if "result" in resp and "content" not in resp and "meta" not in resp:
+        return str(resp["result"])[:500]
 
     # No structuredContent — fall back to content[0].text
     content = resp.get("content") or []

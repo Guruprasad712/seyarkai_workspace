@@ -11,6 +11,8 @@ _BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 
 def _get_test_url() -> str:
+    from urllib.parse import urlparse
+
     url = os.environ.get("TEST_DATABASE_URL", "")
     if not url:
         # Fall back to reading from .env at repo root
@@ -22,6 +24,32 @@ def _get_test_url() -> str:
                     break
     if not url:
         pytest.skip("TEST_DATABASE_URL not set")
+
+    # Guard: database name must end in "_test"
+    db_name = urlparse(url).path.lstrip("/")
+    if not db_name.endswith("_test"):
+        pytest.exit(
+            f"TEST_DATABASE_URL database '{db_name}' does not end in '_test'. "
+            "Refusing to run tests against a non-test database.",
+            returncode=1,
+        )
+
+    # Guard: TEST_DATABASE_URL must not be the same as DATABASE_URL
+    dev_url = os.environ.get("DATABASE_URL", "")
+    if not dev_url:
+        env_path = _BACKEND_DIR.parent / ".env"
+        if env_path.exists():
+            for line in env_path.read_text().splitlines():
+                if line.startswith("DATABASE_URL="):
+                    dev_url = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+    if dev_url and dev_url.rstrip("/") == url.rstrip("/"):
+        pytest.exit(
+            "TEST_DATABASE_URL is identical to DATABASE_URL. "
+            "Refusing to run tests against the development database.",
+            returncode=1,
+        )
+
     return url
 
 

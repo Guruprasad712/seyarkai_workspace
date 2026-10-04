@@ -109,3 +109,49 @@ async def test_google_search_with_function_tool_bypass():
         f"No agent.message in events: {events}"
     )
     print(f"\n[RECORDED] bypass=True success — events: {[e['event_type'] for e in events]}")
+
+
+@pytest.mark.live
+async def test_sub_agent_llm_call_budget():
+    """Does the search sub-agent's LLM call count toward max_llm_calls?
+
+    Set max_llm_calls=1. If sub-agent calls count, the stage hits the cap immediately.
+    If they run independently, the stage should complete normally.
+    Result is recorded in docs/ADK_NOTES.md.
+    """
+    from google.adk.tools.google_search_tool import GoogleSearchTool
+
+    adder = _make_adder_tool()
+    events: list[dict] = []
+    error: StageError | None = None
+
+    try:
+        async with contextlib.aclosing(
+            run_stage(
+                {
+                    "name": "budget_test_agent",
+                    "instructions": "You are a concise assistant.",
+                },
+                "Please use google_search_agent to find today's date.",
+                tool_names=[],
+                max_llm_calls=1,
+                _extra_tools=[
+                    GoogleSearchTool(bypass_multi_tools_limit=True),
+                    adder,
+                ],
+            )
+        ) as gen:
+            async for event in gen:
+                events.append(event)
+    except StageError as e:
+        error = e
+
+    if error:
+        print(f"\n[RECORDED] Sub-agent calls DO count toward max_llm_calls: {error}")
+    else:
+        print(
+            f"\n[RECORDED] Sub-agent calls do NOT count toward max_llm_calls "
+            f"(stage completed). events: {[e['event_type'] for e in events]}"
+        )
+    # Either outcome is valid — the test records the result.
+    assert error is not None or any(e["event_type"] == "agent.message" for e in events)

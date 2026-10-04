@@ -216,3 +216,63 @@ def test_non_final_text_skipped():
     )
     result = normalise(ev)
     assert result == []
+
+
+# ---------------------------------------------------------------------------
+# spike4: google_search sub-agent (GoogleSearchAgentTool) shapes
+# Confirmed live 2026-10-04: function_call.name='google_search_agent',
+# function_response.response={'result': '<answer>'}
+# ---------------------------------------------------------------------------
+
+def test_google_search_agent_tool_called():
+    """function_call from google_search sub-agent wrapping → tool.called."""
+    ev = _make_event(
+        parts=[_make_part(function_call=_make_fn_call("google_search_agent", {"request": "today's date"}))],
+        is_final=False,
+    )
+    result = normalise(ev)
+    assert result == [
+        {
+            "event_type": "tool.called",
+            "payload": {
+                "tool_name": "google_search_agent",
+                "arguments": {"request": "today's date"},
+            },
+        }
+    ]
+
+
+def test_google_search_agent_tool_result():
+    """function_response from google_search sub-agent → tool.result with answer text.
+
+    ADK agent-call shape: {'result': '<str>'} — no structuredContent, no meta, no content.
+    _unwrap_function_response must return the result value directly.
+    """
+    response_payload = {"result": "Today's date is Friday, October 2, 2026."}
+    ev = _make_event(
+        parts=[_make_part(function_response=_make_fn_resp("google_search_agent", response_payload))],
+        is_final=False,
+    )
+    result = normalise(ev)
+    assert result == [
+        {
+            "event_type": "tool.result",
+            "payload": {
+                "tool_name": "google_search_agent",
+                "summary": "Today's date is Friday, October 2, 2026.",
+            },
+        }
+    ]
+
+
+def test_agent_call_result_not_confused_with_fastmcp_wrap():
+    """{'result': ...} with no 'content'/'meta' keys → ADK agent-call path, not FastMCP wrap."""
+    # FastMCP wrap shape has meta.fastmcp.wrap_result=True AND structuredContent
+    # This response has only 'result' — must use the ADK agent-call branch.
+    response_payload = {"result": "some answer"}
+    ev = _make_event(
+        parts=[_make_part(function_response=_make_fn_resp("some_agent", response_payload))],
+        is_final=False,
+    )
+    result = normalise(ev)
+    assert result[0]["payload"]["summary"] == "some answer"

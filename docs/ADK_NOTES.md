@@ -427,3 +427,73 @@ because it has `bypass_multi_tools_limit=False` by default.
 The alternative — wrapping `google_search` as an MCP tool — is deferred to the backlog.
 It would avoid the sub-agent overhead but requires a new MCP server and is not needed
 for the MVP.
+
+---
+
+### Live event samples — spike4 (google_search with bypass, multi-tool)
+
+Model: `gemini-2.5-flash`, Vertex AI, ADK 2.11.0 — `bypass_multi_tools_limit=True`
+Tools: `GoogleSearchTool(bypass_multi_tools_limit=True)` + `FunctionTool(adder_tool)`
+Prompt: `"Please use the google_search_agent tool to search the web: what is today's date?"`
+
+```
+--- EVENT ---
+  author:    'spike4_agent'
+  final:     False
+  partial:   None
+  usage:     prompt=98 candidates=19 thoughts=50
+  parts (1):
+  part[0]:
+    function_call.name='google_search_agent'
+    function_call.args={'request': "today's date"}
+
+--- EVENT ---
+  author:    'spike4_agent'
+  final:     False
+  partial:   None
+  parts (1):
+  part[0]:
+    function_response.name='google_search_agent'
+    function_response.response type=dict
+      ['result'] = "Today's date is Friday, October 2, 2026."
+
+--- EVENT ---
+  author:    'spike4_agent'
+  final:     True
+  partial:   None
+  usage:     prompt=181 candidates=17 thoughts=None
+  parts (1):
+  part[0]:
+    text="Today's date is Friday, October 2, 2026."
+```
+
+#### Observations (spike4)
+
+- `bypass_multi_tools_limit=True` only activates the `GoogleSearchAgentTool` wrapping
+  when there are **multiple tools**. With a single tool, ADK uses native grounding
+  (transparent — no function_call/function_response events emitted, just a text response).
+- The sub-agent is exposed as a `function_call` with `name='google_search_agent'` and
+  `args={'request': '<query string>'}`.
+- The `function_response.response` is a plain Python dict `{'result': '<answer string>'}`.
+  This has **no `structuredContent` or `meta` keys** — it is ADK's own agent-call format,
+  not a FastMCP response.
+- `_unwrap_function_response` must handle `{'result': str}` (no `structuredContent`) as
+  a new shape: return `resp['result']` directly, truncated to 500 chars.
+- The solo path (no other tools): native grounding fires at the model level; no
+  `function_call` or `function_response` events appear in the outer agent's stream.
+  `normalise()` emits only `agent.message` for the final text.
+
+#### Sub-agent LLM call budget (spike4b — live 2026-10-04)
+
+**The `google_search_agent` sub-agent's LLM calls DO count toward `max_llm_calls`.**
+
+Test: `max_llm_calls=1` + `GoogleSearchTool(bypass_multi_tools_limit=True)` + a
+`FunctionTool`. The stage raised `StageError("LLM call cap exceeded (1 calls)")` —
+the sub-agent's call consumed the parent's budget immediately.
+
+**Implication for `build_agent`**: when `google_search` is enabled, the effective
+per-stage LLM call budget is shared between the parent agent and the search sub-agent.
+`MAX_LLM_CALLS_PER_STAGE` (default 8) should account for at least 2 calls per search
+invocation (one for the sub-agent to run the search, one for the parent to process the
+result and produce a final answer). A budget of 1 will always fail if the model calls
+google_search.
