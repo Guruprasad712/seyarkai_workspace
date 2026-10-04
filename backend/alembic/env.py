@@ -17,6 +17,11 @@ def get_url() -> str:
     from pathlib import Path
     from dotenv import load_dotenv
 
+    # Honour sqlalchemy.url when set programmatically (e.g. from conftest).
+    cfg_url = config.get_main_option("sqlalchemy.url", default=None)
+    if cfg_url:
+        return cfg_url
+
     # Load repo-root .env so alembic CLI picks up DATABASE_URL without a shell export
     load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 

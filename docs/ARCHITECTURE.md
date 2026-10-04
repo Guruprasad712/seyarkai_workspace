@@ -29,8 +29,8 @@ humans stay in control of what matters.
 │    └── mcp_servers.docs      → generate_document → Google Docs API     │
 └────────────────────────────────────────────────────────────────────────┘
       │                 │                  │                  │
- Cloud SQL         Secret Manager    Vertex AI Search     Gemini
- (Postgres 16)                       (data store)         (AI Studio key)
+ Cloud SQL         Secret Manager    Vertex AI Search     Gemini (Vertex AI)
+ (Postgres 16)                       (data store)         (AI Studio key = unfunded fallback)
 ```
 
 ## Decisions
@@ -39,7 +39,7 @@ humans stay in control of what matters.
 | Backend | FastAPI, async SQLAlchemy 2, Alembic, Postgres | Relational model fits policies, stages, checkpoints |
 | Agent runtime | ADK LlmAgent + Runner, one agent built per stage from that stage's published agent version | Native Google Agent Platform usage |
 | Orchestration | Our own stage/checkpoint engine around ADK | Governance is the product; ADK does not provide it |
-| LLM | Gemini via AI Studio key; Vertex AI optional in cloud | Simplest path to a working runtime |
+| LLM | Gemini via Vertex AI (`GOOGLE_GENAI_USE_VERTEXAI=1`); AI Studio key is an unfunded fallback for local dev without ADC | Live runtime uses Vertex; AI Studio key is not funded |
 | Models | `GEMINI_MODEL_FAST` (execution, ask), `GEMINI_MODEL_SMART` (policy generation) | Names confirmed on Day 2, never hardcoded |
 | Tools | Real MCP servers (FastMCP) over stdio via ADK MCPToolset | Real protocol, nothing extra to deploy |
 | Knowledge search | `KnowledgeRetriever` interface; `VertexSearchRetriever` is the only production implementation; `FakeRetriever` for unit tests | Test seam, not a second backend |

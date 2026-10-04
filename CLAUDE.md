@@ -21,7 +21,7 @@ or reference any other codebase. Build from the contracts in docs/.
 ## Stack
 - Backend: Python 3.11, FastAPI, async SQLAlchemy 2, Alembic, Postgres
   (local Postgres 16 for development, Cloud SQL in production)
-- Runtime: Google ADK (LlmAgent + Runner) with Gemini
+- Runtime: Google ADK (LlmAgent + Runner) with Gemini via Vertex AI (`GOOGLE_GENAI_USE_VERTEXAI=1`); AI Studio key is an unfunded fallback
 - Tools: MCP servers built with FastMCP, connected over stdio via ADK MCPToolset
 - Knowledge: Vertex AI Search behind a KnowledgeRetriever interface
 - Frontend: Next.js (App Router) + TypeScript + Tailwind + shadcn/ui

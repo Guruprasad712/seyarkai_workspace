@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     # Vertex AI Search
     GOOGLE_CLOUD_PROJECT: str = ""
+    GOOGLE_CLOUD_LOCATION: str = "us-central1"
     VERTEX_SEARCH_LOCATION: str = "global"
     VERTEX_SEARCH_DATA_STORE_ID: str = ""
 

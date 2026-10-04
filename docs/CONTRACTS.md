@@ -453,8 +453,9 @@ the source of truth for freshness.
 | DATABASE_URL | `postgresql+asyncpg://…` | Backend |
 | TEST_DATABASE_URL | local test database, `postgresql+asyncpg://…/seyarkai_test` | pytest |
 | JWT_SECRET, JWT_EXPIRE_HOURS | random, `12` | Auth |
-| GEMINI_API_KEY | from AI Studio | Runtime, generation |
-| GOOGLE_GENAI_USE_VERTEXAI | `false` | Runtime |
+| GEMINI_API_KEY | from AI Studio — **unfunded fallback only**; Vertex AI is the live path | Runtime, generation |
+| GOOGLE_GENAI_USE_VERTEXAI | `"1"` (Vertex AI mode, live) or `"0"` / unset (AI Studio fallback) | Runtime |
+| GOOGLE_CLOUD_LOCATION | `us-central1` (matches Cloud Run region) | Runtime, Vertex retriever |
 | GEMINI_MODEL_FAST, GEMINI_MODEL_SMART | confirmed Day 2 | Runtime, generation |
 | MAX_LLM_CALLS_PER_STAGE | `8` | Runtime |
 | KNOWLEDGE_AGEING_DAYS, KNOWLEDGE_STALE_DAYS | `90`, `180` | Knowledge |
