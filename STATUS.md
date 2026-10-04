@@ -30,8 +30,15 @@ Date: 2026-10-04   Region: us-central1
 ### Next
 Day 4 — Policy engine: policies, stages, checkpoints, publish validation; policy generation stub.
 
+### Decision log
+- LLM access is Vertex AI via ADC; AI Studio prepay was unfunded so `GOOGLE_GENAI_USE_VERTEXAI=1` is the only working path.
+- Web search is deferred: coexistence proven (`bypass_multi_tools_limit=True`), but costs a minimum of 2 LLM calls per search invocation.
+- Conftest guard added: tests abort if `TEST_DATABASE_URL` DB name does not end in `_test` or matches `DATABASE_URL`.
+- CI runs `-m "not live and not integration"`: no Vertex AI calls or subprocess tests in CI.
+- Cloud Run deploy and Cloud SQL migration rehearsal pushed to the Day 8–9 block.
+
 ### Blockers / open questions
-- google_search deferred from MVP catalog (see docs/ADK_NOTES.md — sub-agent LLM budget and coexistence findings recorded)
+- None.
 
 ### Backlog (ideas outside today's scope)
 - google_search as a built-in tool (`server_key="__builtin__"`) — proposal in docs/ADK_NOTES.md; needs approval before implementation
