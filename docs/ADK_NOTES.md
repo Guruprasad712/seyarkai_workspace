@@ -356,3 +356,24 @@ the execution status to `failed`.
 
 9. `usage_metadata` on a final event includes `thoughts_token_count` — the model uses a
    thinking budget internally even when thoughts are not visible in the event stream.
+
+10. **Windows asyncio subprocess policy (uvicorn `--reload`)**
+
+    ADK's `McpToolset` launches MCP servers as asyncio subprocesses. On Windows,
+    `asyncio.subprocess` requires `ProactorEventLoop`. Python 3.11+ defaults to it, so
+    no fix is needed on Python 3.11. If a `NotImplementedError` appears at subprocess
+    creation (e.g. under an older Python or a framework that forces `SelectorEventLoop`),
+    add this at the top of the entry point **before** any `asyncio.run()`:
+
+    ```python
+    import asyncio, sys
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    ```
+
+    For uvicorn specifically, pass `--loop asyncio` (which picks the platform default,
+    ProactorEventLoop on Windows 3.11+). The `--reload` watchfiles reloader uses a
+    separate process and does not change the child server's event loop policy.
+
+    **Confirmed working on Python 3.11.5 / Windows 11 with `uvicorn --reload`** — no
+    policy override needed at this Python version.
