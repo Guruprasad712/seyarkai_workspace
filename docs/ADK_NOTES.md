@@ -377,3 +377,53 @@ the execution status to `failed`.
 
     **Confirmed working on Python 3.11.5 / Windows 11 with `uvicorn --reload`** — no
     policy override needed at this Python version.
+
+---
+
+## Google Search Tool + MCP / Function Tool Coexistence
+
+Tested live on Vertex AI (`gemini-2.5-flash`, ADK 2.11.0) — 2026-10-04.
+
+### Result
+
+| Mode | Outcome |
+|---|---|
+| `GoogleSearchTool()` alone (no other tools) | **PASS** — agent.message returned |
+| `GoogleSearchTool()` + `FunctionTool` (bypass=False) | **FAIL** — Gemini API 400 |
+| `GoogleSearchTool(bypass_multi_tools_limit=True)` + `FunctionTool` | **PASS** — agent.message returned |
+
+### Exact error (bypass=False with a FunctionTool)
+
+```
+google.genai.errors.ClientError: 400 INVALID_ARGUMENT.
+  'message': 'Unable to submit request because Multiple tools are supported only
+              when they are all search tools.'
+  'status': 'INVALID_ARGUMENT'
+```
+
+Vertex AI reference: https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/gemini
+
+### Workaround: `bypass_multi_tools_limit=True`
+
+When `bypass_multi_tools_limit=True` is set, ADK wraps `GoogleSearchTool` in a
+`GoogleSearchAgentTool` sub-agent (`create_google_search_agent(model)`). The parent
+agent sees it as an agent-call tool, not a built-in grounding declaration — so the
+Gemini API receives only function calls and no conflicting built-in tool config.
+
+```python
+from google.adk.tools.google_search_tool import GoogleSearchTool
+
+# Safe to combine with MCP or FunctionTools:
+google_search = GoogleSearchTool(bypass_multi_tools_limit=True)
+```
+
+### Recommendation for `build_agent`
+
+When `"google_search"` appears in `tool_names`, instantiate
+`GoogleSearchTool(bypass_multi_tools_limit=True)` and append it to `adk_tools`.
+Do **not** use the module-level singleton (`from google.adk.tools import google_search`)
+because it has `bypass_multi_tools_limit=False` by default.
+
+The alternative — wrapping `google_search` as an MCP tool — is deferred to the backlog.
+It would avoid the sub-agent overhead but requires a new MCP server and is not needed
+for the MVP.
