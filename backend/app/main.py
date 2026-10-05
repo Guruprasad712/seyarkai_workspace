@@ -7,9 +7,15 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.core.db import AsyncSessionLocal
+from app.core.security import decode_token
+
+# Routes that do not require a token.
+_AUTH_ALLOWLIST = {("/health", "GET"), ("/auth/login", "POST")}
 
 
 def create_app() -> FastAPI:
+    from app.auth import router as auth_router, users_router
+
     app = FastAPI(title="Seyarkai Backend")
 
     origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
@@ -20,6 +26,25 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def require_auth(request: Request, call_next):
+        # CORS preflight — let the CORSMiddleware handle it
+        if request.method == "OPTIONS":
+            return await call_next(request)
+        if (request.url.path, request.method) in _AUTH_ALLOWLIST:
+            return await call_next(request)
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return JSONResponse(status_code=401, content={"detail": "not authenticated"})
+        try:
+            decode_token(auth_header[7:])
+        except Exception:
+            return JSONResponse(status_code=401, content={"detail": "not authenticated"})
+        return await call_next(request)
+
+    app.include_router(auth_router, prefix="/auth", tags=["auth"])
+    app.include_router(users_router, tags=["users"])
 
     @app.get("/health")
     async def health():
@@ -32,7 +57,11 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(request: Request, exc: RequestValidationError):
-        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+        import json as _json
+        errors = exc.errors()
+        # Pydantic v2 may embed raw Exception objects in ctx — make them serializable
+        safe = _json.loads(_json.dumps(errors, default=str))
+        return JSONResponse(status_code=422, content={"detail": safe})
 
     @app.exception_handler(SQLAlchemyError)
     async def sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError):
