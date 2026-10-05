@@ -3,10 +3,10 @@
 Update at the end of every session. Every Claude Code session starts by reading this file,
 CLAUDE.md, and the relevant docs/ sections.
 
-## Current: Day 3 of 10 — Runtime, knowledge MCP, ADK spikes, tests
-Date: 2026-10-04   Region: us-central1
+## Current: Day 5 of 10 — Policy engine
+Date: 2026-10-06   Region: us-central1
 
-### Done (Days 1–3)
+### Done (Days 1–4)
 - [x] Public repo, .gitignore, secret scanning + push protection
 - [x] APIs enabled
 - [x] Secrets: jwt-secret, db-password, gemini-api-key (3; docs identity is keyless)
@@ -26,9 +26,14 @@ Date: 2026-10-04   Region: us-central1
 - [x] requirements.txt: google-adk==2.11.0, google-genai==2.28.0, fastmcp==4.0.10 pinned
 - [x] normalise() handles ADK agent-call response shape `{"result": str}`; unit tests
 - [x] docs: ARCHITECTURE.md, CONTRACTS.md env table, KNOWN_LIMITATIONS.md updated for Vertex switch
+- [x] D3: Auth layer — login, /me, /users, global auth guard middleware, seed script (users + mcp_tools)
+- [x] D3: Agents module — CRUD (agent + version), publish with all-failures collection (SELECT FOR UPDATE, concurrent double-publish guard), tool assignment, retire-on-publish
+- [x] D3: 53 offline tests passing (including 20 agents tests covering all publish rules); conftest fixture isolation pattern established (no HTTP in fixtures, direct DB inserts + create_access_token)
+- [x] D4: Frontend auth — login page, token/user localStorage + cookie mirror, route guard (proxy.ts), AuthProvider context, AppNav with user + logout
+- [x] D4: Frontend agents — agent library list, create form (dynamic capabilities + tool checkboxes), agent detail with version management (inline edit, publish with per-failure display, add version pre-filled from published)
 
 ### Next
-Day 4 — Policy engine: policies, stages, checkpoints, publish validation; policy generation stub.
+Day 5 — Policy engine: policies, stages, checkpoints, publish validation, policy generation stub.
 
 ### Decision log
 - LLM access is Vertex AI via ADC; AI Studio prepay was unfunded so `GOOGLE_GENAI_USE_VERTEXAI=1` is the only working path.

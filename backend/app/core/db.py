@@ -15,5 +15,6 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with AsyncSessionLocal() as session:
+    import app.core.db as _self
+    async with _self.AsyncSessionLocal() as session:
         yield session
