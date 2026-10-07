@@ -3,8 +3,8 @@
 Update at the end of every session. Every Claude Code session starts by reading this file,
 CLAUDE.md, and the relevant docs/ sections.
 
-## Current: Day 5 of 10 — Policy engine
-Date: 2026-10-06   Region: us-central1
+## Current: Day 5 of 10 — Policy engine (frontend + generation stub)
+Date: 2026-10-08   Region: us-central1
 
 ### Done (Days 1–4)
 - [x] Public repo, .gitignore, secret scanning + push protection
@@ -31,9 +31,11 @@ Date: 2026-10-06   Region: us-central1
 - [x] D3: 53 offline tests passing (including 20 agents tests covering all publish rules); conftest fixture isolation pattern established (no HTTP in fixtures, direct DB inserts + create_access_token)
 - [x] D4: Frontend auth — login page, token/user localStorage + cookie mirror, route guard (proxy.ts), AuthProvider context, AppNav with user + logout
 - [x] D4: Frontend agents — agent library list, create form (dynamic capabilities + tool checkboxes), agent detail with version management (inline edit, publish with per-failure display, add version pre-filled from published)
+- [x] D4: Projects + work items backend — CRUD (projects, work items), worker assignment (ai_agent + human), unique name constraints, migration 0002, 18 tests
+- [x] D4: Policy engine backend — policies, stages, checkpoints, publish with all-failures collection, stage renumbering, immutability on published, 28 tests; all 99 offline tests passing
 
 ### Next
-Day 5 — Policy engine: policies, stages, checkpoints, publish validation, policy generation stub.
+Day 5 — Policy engine frontend + policy generation stub (LLM-drafted policy from work item context).
 
 ### Decision log
 - LLM access is Vertex AI via ADC; AI Studio prepay was unfunded so `GOOGLE_GENAI_USE_VERTEXAI=1` is the only working path.
