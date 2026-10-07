@@ -34,9 +34,11 @@ Date: 2026-10-08   Region: us-central1
 - [x] D4: Projects + work items backend — CRUD (projects, work items), worker assignment (ai_agent + human), unique name constraints, migration 0002, 18 tests
 - [x] D4: Policy engine backend — policies, stages, checkpoints, publish with all-failures collection, stage renumbering, immutability on published, 28 tests; all 99 offline tests passing
 - [x] D4: Policy generation endpoint — POST /work-items/{id}/policies/generate; Gemini via run_stage, structured JSON output, pre-flight validation (all-failures), 201 PolicyOut on success, 422 on validation failure, 502 on LLM error; 7 new tests (6 offline + 1 live); all 107 offline tests passing
+- [x] D5: Projects + Work Items frontend — /projects list (inline create form), /projects/[id] detail (work item list + inline create form with agent version + user worker picker), /projects/[id]/work-items/[wiId] detail (read-only fields, workers list, Generate Policy button with 201/409/422/502 result states); new types: Project, WorkerOut, WorkItem in lib/types.ts
+- [x] D5: Policy editor UI — /policies/[policyId] three-panel layout (agents left, workflow center, checkpoints right); add/edit/delete/reorder stages; per-stage and final_review checkpoints; publish with inline failure display; auto-nav from work item after generate; read-only published state; new types: StageOut, CheckpointOut, PolicyOut in lib/types.ts
 
 ### Next
-Day 5 — Policy engine frontend (projects, work items, policies, generate, stage/checkpoint CRUD).
+Day 6 — Execution engine frontend (run work item, execution status, stage events, checkpoint approvals).
 
 ### Decision log
 - LLM access is Vertex AI via ADC; AI Studio prepay was unfunded so `GOOGLE_GENAI_USE_VERTEXAI=1` is the only working path.
