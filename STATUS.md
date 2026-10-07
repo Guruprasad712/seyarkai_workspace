@@ -3,7 +3,7 @@
 Update at the end of every session. Every Claude Code session starts by reading this file,
 CLAUDE.md, and the relevant docs/ sections.
 
-## Current: Day 5 of 10 — Policy engine (frontend + generation stub)
+## Current: Day 6 of 10 — Execution engine
 Date: 2026-10-08   Region: us-central1
 
 ### Done (Days 1–4)
