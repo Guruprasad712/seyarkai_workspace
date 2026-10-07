@@ -9,6 +9,25 @@ from pydantic import BaseModel, field_validator
 from app.policies.models import Checkpoint, Policy, PolicyStage
 
 
+class GeneratedStage(BaseModel):
+    name: str
+    description: str
+    expected_output: str
+    worker_ref: str  # work_item_workers.id
+
+
+class GeneratedCheckpoint(BaseModel):
+    type: Literal["approval", "review", "input", "final_review"]
+    stage_index: int | None = None  # zero-based; None for final_review
+    assignee_ref: str  # work_item_workers.id
+    instruction: str
+
+
+class GenerationResult(BaseModel):
+    stages: list[GeneratedStage]
+    checkpoints: list[GeneratedCheckpoint]
+
+
 class CreatePolicyRequest(BaseModel):
     generated_by: str = "manual"
 

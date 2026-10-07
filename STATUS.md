@@ -33,9 +33,10 @@ Date: 2026-10-08   Region: us-central1
 - [x] D4: Frontend agents — agent library list, create form (dynamic capabilities + tool checkboxes), agent detail with version management (inline edit, publish with per-failure display, add version pre-filled from published)
 - [x] D4: Projects + work items backend — CRUD (projects, work items), worker assignment (ai_agent + human), unique name constraints, migration 0002, 18 tests
 - [x] D4: Policy engine backend — policies, stages, checkpoints, publish with all-failures collection, stage renumbering, immutability on published, 28 tests; all 99 offline tests passing
+- [x] D4: Policy generation endpoint — POST /work-items/{id}/policies/generate; Gemini via run_stage, structured JSON output, pre-flight validation (all-failures), 201 PolicyOut on success, 422 on validation failure, 502 on LLM error; 7 new tests (6 offline + 1 live); all 107 offline tests passing
 
 ### Next
-Day 5 — Policy engine frontend + policy generation stub (LLM-drafted policy from work item context).
+Day 5 — Policy engine frontend (projects, work items, policies, generate, stage/checkpoint CRUD).
 
 ### Decision log
 - LLM access is Vertex AI via ADC; AI Studio prepay was unfunded so `GOOGLE_GENAI_USE_VERTEXAI=1` is the only working path.

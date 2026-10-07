@@ -669,3 +669,244 @@ async def test_publish_policy_stage_agent_not_worker(
         await db.execute(text("DELETE FROM agent_versions WHERE id = :id"), {"id": other_version_id})
         await db.execute(text("DELETE FROM agents WHERE id = :id"), {"id": other_agent_id})
         await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Generate
+# ---------------------------------------------------------------------------
+
+async def _get_worker_ids(wi_id: str, test_db_url: str) -> dict[str, str]:
+    """Return {'ai': <work_item_workers.id>, 'human': <work_item_workers.id>} for the work item."""
+    async with _test_db(test_db_url) as db:
+        result = await db.execute(
+            text("SELECT id, worker_type FROM work_item_workers WHERE work_item_id = :wid"),
+            {"wid": wi_id},
+        )
+        rows = result.fetchall()
+    ai_id = next(str(r[0]) for r in rows if r[1] == "ai_agent")
+    human_id = next(str(r[0]) for r in rows if r[1] == "human")
+    return {"ai": ai_id, "human": human_id}
+
+
+def _valid_generate_json(ai_worker_id: str, human_worker_id: str) -> str:
+    """Return a valid GenerationResult JSON string."""
+    import json as _json
+    return _json.dumps({
+        "stages": [
+            {"name": "Draft", "description": "AI drafts", "expected_output": "draft doc", "worker_ref": ai_worker_id}
+        ],
+        "checkpoints": [
+            {"type": "final_review", "stage_index": None, "assignee_ref": human_worker_id, "instruction": "approve"}
+        ],
+    })
+
+
+def _patch_run_stage(monkeypatch, mock_fn):
+    """Patch run_stage in the policies router module."""
+    import importlib
+    import sys
+    # Force module import (not the APIRouter object re-exported by __init__)
+    if "app.policies.router" not in sys.modules:
+        importlib.import_module("app.policies.router")
+    _router_mod = sys.modules["app.policies.router"]
+    monkeypatch.setattr(_router_mod, "run_stage", mock_fn)
+
+
+@pytest.mark.asyncio
+async def test_generate_policy_bad_json(
+    async_client: AsyncClient, auth_headers, created_work_item, monkeypatch
+):
+    def _mock(*args, **kwargs):
+        async def _gen():
+            yield {"event_type": "stage.stream_end", "payload": {"final_text": "not json at all"}}
+        return _gen()
+
+    _patch_run_stage(monkeypatch, _mock)
+    r = await async_client.post(
+        f"/work-items/{created_work_item['id']}/policies/generate",
+        headers=auth_headers,
+    )
+    assert r.status_code == 502
+    assert "parse error" in r.json()["detail"]["detail"]
+
+
+@pytest.mark.asyncio
+async def test_generate_policy_timeout(
+    async_client: AsyncClient, auth_headers, created_work_item, monkeypatch
+):
+    from app.runtime import StageError as _StageError
+
+    def _mock(*args, **kwargs):
+        async def _gen():
+            raise _StageError("Stage timed out after 60.0s")
+            yield  # make it an async generator
+        return _gen()
+
+    _patch_run_stage(monkeypatch, _mock)
+    r = await async_client.post(
+        f"/work-items/{created_work_item['id']}/policies/generate",
+        headers=auth_headers,
+    )
+    assert r.status_code == 502
+    assert "Policy generation failed" in r.json()["detail"]["error"]
+
+
+@pytest.mark.asyncio
+async def test_generate_policy_bad_worker_ref(
+    async_client: AsyncClient, auth_headers, created_work_item, monkeypatch
+):
+    """LLM returns valid JSON but with a worker_ref that doesn't exist → 422."""
+    import json as _json
+
+    def _mock(*args, **kwargs):
+        bad_json = _json.dumps({
+            "stages": [
+                {"name": "S", "description": "d", "expected_output": "o",
+                 "worker_ref": "00000000-0000-0000-0000-000000000000"}
+            ],
+            "checkpoints": [
+                {"type": "final_review", "stage_index": None,
+                 "assignee_ref": "00000000-0000-0000-0000-000000000000", "instruction": "x"}
+            ],
+        })
+
+        async def _gen():
+            yield {"event_type": "stage.stream_end", "payload": {"final_text": bad_json}}
+        return _gen()
+
+    _patch_run_stage(monkeypatch, _mock)
+    r = await async_client.post(
+        f"/work-items/{created_work_item['id']}/policies/generate",
+        headers=auth_headers,
+    )
+    assert r.status_code == 422
+    codes = [f["code"] for f in r.json()["detail"]["failures"]]
+    assert "worker_ref_invalid" in codes
+
+
+@pytest.mark.asyncio
+async def test_generate_policy_missing_final_review(
+    async_client: AsyncClient, auth_headers, created_work_item, monkeypatch, test_db_url
+):
+    """LLM returns valid stages but no final_review checkpoint → 422."""
+    import json as _json
+
+    ids = await _get_worker_ids(created_work_item["id"], test_db_url)
+
+    def _mock(*args, **kwargs):
+        payload = _json.dumps({
+            "stages": [
+                {"name": "S", "description": "d", "expected_output": "o",
+                 "worker_ref": ids["ai"]}
+            ],
+            "checkpoints": [],  # no final_review
+        })
+
+        async def _gen():
+            yield {"event_type": "stage.stream_end", "payload": {"final_text": payload}}
+        return _gen()
+
+    _patch_run_stage(monkeypatch, _mock)
+    r = await async_client.post(
+        f"/work-items/{created_work_item['id']}/policies/generate",
+        headers=auth_headers,
+    )
+    assert r.status_code == 422
+    codes = [f["code"] for f in r.json()["detail"]["failures"]]
+    assert "missing_final_review" in codes
+
+
+@pytest.mark.asyncio
+async def test_generate_policy_multiple_failures(
+    async_client: AsyncClient, auth_headers, created_work_item, monkeypatch
+):
+    """Bad worker_ref + no final_review → both failures collected."""
+    import json as _json
+
+    def _mock(*args, **kwargs):
+        bad_json = _json.dumps({
+            "stages": [
+                {"name": "S", "description": "d", "expected_output": "o",
+                 "worker_ref": "bad-id"}
+            ],
+            "checkpoints": [],  # missing final_review
+        })
+
+        async def _gen():
+            yield {"event_type": "stage.stream_end", "payload": {"final_text": bad_json}}
+        return _gen()
+
+    _patch_run_stage(monkeypatch, _mock)
+    r = await async_client.post(
+        f"/work-items/{created_work_item['id']}/policies/generate",
+        headers=auth_headers,
+    )
+    assert r.status_code == 422
+    codes = [f["code"] for f in r.json()["detail"]["failures"]]
+    assert "worker_ref_invalid" in codes
+    assert "missing_final_review" in codes
+
+
+@pytest.mark.asyncio
+async def test_generate_policy_draft_exists(
+    async_client: AsyncClient, auth_headers, created_work_item
+):
+    """If a draft already exists, generate returns 409."""
+    wi_id = created_work_item["id"]
+    # Create a manual draft first
+    r = await async_client.post(f"/work-items/{wi_id}/policies", json={}, headers=auth_headers)
+    assert r.status_code == 201
+
+    r = await async_client.post(
+        f"/work-items/{wi_id}/policies/generate",
+        headers=auth_headers,
+    )
+    assert r.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_generate_policy_success_mock(
+    async_client: AsyncClient, auth_headers, created_work_item, monkeypatch, test_db_url
+):
+    """Happy path with a mocked run_stage — creates draft policy, generated_by=llm."""
+    ids = await _get_worker_ids(created_work_item["id"], test_db_url)
+
+    def _mock(*args, **kwargs):
+        payload = _valid_generate_json(ids["ai"], ids["human"])
+
+        async def _gen():
+            yield {"event_type": "stage.stream_end", "payload": {"final_text": payload}}
+        return _gen()
+
+    _patch_run_stage(monkeypatch, _mock)
+    r = await async_client.post(
+        f"/work-items/{created_work_item['id']}/policies/generate",
+        headers=auth_headers,
+    )
+    assert r.status_code == 201, r.text
+    data = r.json()
+    assert data["status"] == "draft"
+    assert data["generated_by"] == "llm"
+    assert len(data["stages"]) == 1
+    assert data["stages"][0]["name"] == "Draft"
+    assert len(data["checkpoints"]) == 1
+    assert data["checkpoints"][0]["type"] == "final_review"
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
+async def test_generate_policy_live(
+    async_client: AsyncClient, auth_headers, created_work_item
+):
+    """Real Gemini call — requires GOOGLE_GENAI_USE_VERTEXAI + ADC."""
+    r = await async_client.post(
+        f"/work-items/{created_work_item['id']}/policies/generate",
+        headers=auth_headers,
+    )
+    assert r.status_code == 201, r.text
+    data = r.json()
+    assert data["status"] == "draft"
+    assert data["generated_by"] == "llm"
+    assert len(data["stages"]) >= 1
+    final_reviews = [c for c in data["checkpoints"] if c["type"] == "final_review"]
+    assert len(final_reviews) == 1
