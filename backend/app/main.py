@@ -16,6 +16,8 @@ _AUTH_ALLOWLIST = {("/health", "GET"), ("/auth/login", "POST")}
 def create_app() -> FastAPI:
     from app.auth import router as auth_router, users_router
     from app.agents import router as agents_router
+    from app.projects import router as projects_router
+    from app.work_items import router as work_items_router
 
     app = FastAPI(title="Seyarkai Backend")
 
@@ -47,6 +49,8 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/auth", tags=["auth"])
     app.include_router(users_router, tags=["users"])
     app.include_router(agents_router, tags=["agents"])
+    app.include_router(projects_router, tags=["projects"])
+    app.include_router(work_items_router, tags=["work_items"])
 
     @app.get("/health")
     async def health():
