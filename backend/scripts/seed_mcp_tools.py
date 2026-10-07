@@ -52,10 +52,11 @@ TOOLS: list[dict] = [
 
 
 async def seed(db_url: str | None = None) -> int:
-    """Upsert all MVP tools. Returns the total mcp_tools row count after seeding."""
+    """Upsert all MVP tools. Returns the count of seeded tools found in mcp_tools after seeding."""
     url = db_url or settings.DATABASE_URL
     engine = create_async_engine(url, echo=False)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    tool_names = [t["tool_name"] for t in TOOLS]
     try:
         async with session_factory() as session:
             for tool in TOOLS:
@@ -64,7 +65,10 @@ async def seed(db_url: str | None = None) -> int:
                     {"id": str(uuid.uuid4()), **tool},
                 )
             await session.commit()
-            result = await session.execute(text("SELECT COUNT(*) FROM mcp_tools"))
+            result = await session.execute(
+                text("SELECT COUNT(*) FROM mcp_tools WHERE tool_name = ANY(:names)"),
+                {"names": tool_names},
+            )
             return result.scalar_one()
     finally:
         await engine.dispose()
