@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from sse_starlette.sse import EventSourceResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.core.db import get_db
-from app.executions.models import Execution
+from app.executions.engine import ExecutionEngine
+from app.executions.models import Execution, ExecutionEvent
 from app.executions.schemas import CreateExecutionResponse, ExecutionOut
 from app.policies.models import Checkpoint, Policy
 from app.work_items.models import WorkItem
@@ -17,6 +20,7 @@ from app.work_items.models import WorkItem
 router = APIRouter()
 
 _ACTIVE_STATUSES = ("queued", "running", "waiting_for_approval")
+_TERMINAL_STATUSES = ("completed", "failed")
 
 
 @router.post(
@@ -26,6 +30,7 @@ _ACTIVE_STATUSES = ("queued", "running", "waiting_for_approval")
 )
 async def create_execution(
     work_item_id: str,
+    background_tasks: BackgroundTasks,
     _: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -94,6 +99,7 @@ async def create_execution(
     await db.flush()
     await db.commit()
 
+    background_tasks.add_task(ExecutionEngine().run_execution, str(execution.id))
     return CreateExecutionResponse(execution_id=str(execution.id))
 
 
@@ -135,3 +141,45 @@ async def list_executions(
     )
     executions = list(result.scalars().all())
     return [ExecutionOut.from_orm(e) for e in executions]
+
+
+@router.get("/executions/{execution_id}/stream")
+async def stream_execution_events(
+    execution_id: str,
+    after: str | None = Query(default=None),
+    _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Execution).where(Execution.id == execution_id))
+    execution = result.scalar_one_or_none()
+    if execution is None:
+        raise HTTPException(status_code=404, detail="execution not found")
+
+    query = select(ExecutionEvent).where(ExecutionEvent.execution_id == execution_id)
+
+    if after is not None:
+        result = await db.execute(
+            select(ExecutionEvent).where(ExecutionEvent.id == after)
+        )
+        anchor = result.scalar_one_or_none()
+        if anchor is not None:
+            query = query.where(ExecutionEvent.created_at > anchor.created_at)
+
+    query = query.order_by(ExecutionEvent.created_at)
+    result = await db.execute(query)
+    events = list(result.scalars().all())
+
+    is_terminal = execution.status in _TERMINAL_STATUSES
+
+    async def _generate():
+        for ev in events:
+            yield {
+                "id": str(ev.id),
+                "event": ev.event_type,
+                "data": json.dumps(ev.payload),
+            }
+        if is_terminal and not events:
+            # No new events and already terminal — signal to client
+            yield {"event": "stream.end", "data": json.dumps({"status": execution.status})}
+
+    return EventSourceResponse(_generate())
