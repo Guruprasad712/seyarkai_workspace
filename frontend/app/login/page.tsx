@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
 import { apiFetch, ApiError } from "@/lib/api"
 import { getToken, setToken } from "@/lib/auth"
 import { useAuth } from "@/components/auth-provider"
@@ -15,7 +14,6 @@ type LoginResponse = {
 }
 
 export default function LoginPage() {
-  const router = useRouter()
   const { setUser } = useAuth()
 
   const [email, setEmail] = useState("")
@@ -24,8 +22,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (getToken()) router.replace("/")
-  }, [router])
+    if (getToken()) window.location.href = "/"
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -38,7 +36,7 @@ export default function LoginPage() {
       })
       setToken(data.access_token)
       setUser(data.user)
-      router.replace("/")
+      window.location.href = "/"
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed")
     } finally {
