@@ -114,3 +114,25 @@ export type PolicyOut = {
   stages: StageOut[]
   checkpoints: CheckpointOut[]
 }
+
+export type CheckpointBrief = {
+  id: string
+  type: string
+  assigned_user_id: string
+  instruction: string
+  stage_id: string | null
+}
+
+export type ExecutionOut = {
+  id: string
+  work_item_id: string
+  policy_id: string
+  execution_number: number
+  status: string
+  current_stage_id: string | null
+  blocking_checkpoint: CheckpointBrief | null
+  started_at: string | null
+  completed_at: string | null
+  error: string | null
+  created_at: string
+}
