@@ -1,4 +1,4 @@
-"""Execution engine tests — all offline (no Vertex AI calls)."""
+"""Execution create/read/list endpoint tests — all offline (no engine runs)."""
 from __future__ import annotations
 
 import contextlib
@@ -11,6 +11,20 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.security import create_access_token, hash_password
+
+
+# Suppress the background engine task for all tests in this file — these tests
+# cover the HTTP layer only (create/read/list). The engine itself is tested in
+# test_engine.py. Without this, the engine fires in a background task and races
+# with fixture teardown (deleting rows the engine is still using).
+@pytest.fixture(autouse=True)
+def _no_engine(monkeypatch):
+    async def _noop(self, execution_id: str) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "app.executions.engine.ExecutionEngine.run_execution", _noop
+    )
 
 
 # ---------------------------------------------------------------------------
