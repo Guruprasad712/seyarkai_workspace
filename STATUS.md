@@ -36,6 +36,7 @@ Date: 2026-10-08   Region: us-central1
 - [x] D4: Policy generation endpoint — POST /work-items/{id}/policies/generate; Gemini via run_stage, structured JSON output, pre-flight validation (all-failures), 201 PolicyOut on success, 422 on validation failure, 502 on LLM error; 7 new tests (6 offline + 1 live); all 107 offline tests passing
 - [x] D4: Projects + Work Items frontend — /projects list (inline create form), /projects/[id] detail (work item list + inline create form with agent version + user worker picker), /projects/[id]/work-items/[wiId] detail (read-only fields, workers list, Generate Policy button with 201/409/422/502 result states); new types: Project, WorkerOut, WorkItem in lib/types.ts
 - [x] D4: Policy editor UI — /policies/[policyId] three-panel layout (agents left, workflow center, checkpoints right); add/edit/delete/reorder stages; per-stage and final_review checkpoints; publish with inline failure display; auto-nav from work item after generate; read-only published state; new types: StageOut, CheckpointOut, PolicyOut in lib/types.ts
+- [x] D4: Fix login redirect — replaced router.replace("/") with window.location.href="/" so cookie is flushed before proxy.ts middleware evaluates the next request
 
 ### Next
 Day 5 — Execution engine (backend: run work item, stage execution, checkpoint responses, SSE events; frontend: execution status, stage events, checkpoint approvals).
