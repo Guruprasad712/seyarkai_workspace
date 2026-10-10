@@ -19,6 +19,7 @@ def create_app() -> FastAPI:
     from app.projects import router as projects_router
     from app.work_items import router as work_items_router
     from app.policies import router as policies_router
+    from app.executions import router as executions_router
 
     app = FastAPI(title="Seyarkai Backend")
 
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(projects_router, tags=["projects"])
     app.include_router(work_items_router, tags=["work_items"])
     app.include_router(policies_router, tags=["policies"])
+    app.include_router(executions_router, tags=["executions"])
 
     @app.get("/health")
     async def health():

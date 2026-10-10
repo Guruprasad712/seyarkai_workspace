@@ -1,27 +1,29 @@
 "use client"
 
-import { use, useCallback, useEffect, useState } from "react"
+import { use, useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Loader2, Sparkles } from "lucide-react"
+import { Loader2, Play, Sparkles } from "lucide-react"
 import { apiFetch, ApiError, extractPublishFailures } from "@/lib/api"
 import { Button } from "@/components/ui/button"
-import type { WorkItem } from "@/lib/types"
+import type { ExecutionOut, PolicyOut, WorkItem } from "@/lib/types"
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const wiStatusColors: Record<string, string> = {
+const statusColors: Record<string, string> = {
   new: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+  in_progress: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
   running: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+  waiting_for_approval: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
   completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
   failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const cls = wiStatusColors[status] ?? "bg-muted text-muted-foreground"
+  const cls = statusColors[status] ?? "bg-muted text-muted-foreground"
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>
-      {status}
+      {status.replace(/_/g, " ")}
     </span>
   )
 }
@@ -34,6 +36,19 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   )
 }
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return "just now"
+  if (mins < 60) return `${mins} min ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours} hr ago`
+  return `${Math.floor(hours / 24)} d ago`
+}
+
+const TERMINAL = new Set(["completed", "failed"])
+const POLL_MS = 3000
 
 type GenerateResult =
   | { kind: "draft_exists" }
@@ -56,12 +71,31 @@ export default function WorkItemDetailPage({
   const [generating, setGenerating] = useState(false)
   const [generateResult, setGenerateResult] = useState<GenerateResult | null>(null)
 
+  // Execution state
+  const [execution, setExecution] = useState<ExecutionOut | null>(null)
+  const [policy, setPolicy] = useState<PolicyOut | null>(null)
+  const [publishedPolicy, setPublishedPolicy] = useState<PolicyOut | null>(null)
+  const [executing, setExecuting] = useState(false)
+  const [executeError, setExecuteError] = useState("")
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const load = useCallback(async () => {
     setLoading(true)
     setError("")
     try {
-      const wi = await apiFetch<WorkItem>(`/work-items/${wiId}`)
+      const [wi, execs, policies] = await Promise.all([
+        apiFetch<WorkItem>(`/work-items/${wiId}`),
+        apiFetch<ExecutionOut[]>(`/work-items/${wiId}/executions`).catch(() => [] as ExecutionOut[]),
+        apiFetch<PolicyOut[]>(`/work-items/${wiId}/policies`).catch(() => [] as PolicyOut[]),
+      ])
       setWorkItem(wi)
+      if (execs.length > 0) {
+        const latest = execs[execs.length - 1]
+        setExecution(latest)
+      }
+      const published = policies.filter((p) => p.status === "published")
+      const pub = published.sort((a, b) => b.version - a.version)[0] ?? null
+      setPublishedPolicy(pub)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load work item")
     } finally {
@@ -73,14 +107,55 @@ export default function WorkItemDetailPage({
     load()
   }, [load])
 
+  // Load policy once we know the policy_id (for stage name resolution in execution panel)
+  useEffect(() => {
+    if (!execution?.policy_id || policy?.id === execution.policy_id) return
+    apiFetch<PolicyOut>(`/policies/${execution.policy_id}`)
+      .then(setPolicy)
+      .catch(() => {/* best-effort — stage names won't resolve */})
+  }, [execution?.policy_id, policy?.id])
+
+  // Poll while execution is non-terminal
+  useEffect(() => {
+    if (!execution || TERMINAL.has(execution.status)) {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+      return
+    }
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const updated = await apiFetch<ExecutionOut>(`/executions/${execution.id}`)
+        setExecution(updated)
+        if (TERMINAL.has(updated.status) && pollRef.current) {
+          clearInterval(pollRef.current)
+          pollRef.current = null
+          // Refresh work item status too
+          apiFetch<WorkItem>(`/work-items/${wiId}`).then(setWorkItem).catch(() => {})
+        }
+      } catch {
+        // network hiccup — keep polling
+      }
+    }, POLL_MS)
+
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }
+  }, [execution?.id, execution?.status, wiId])
+
   async function handleGeneratePolicy() {
     setGenerateResult(null)
     setGenerating(true)
     try {
-      const policy = await apiFetch<{ id: string }>(`/work-items/${wiId}/policies/generate`, {
+      const pol = await apiFetch<{ id: string }>(`/work-items/${wiId}/policies/generate`, {
         method: "POST",
       })
-      router.push(`/policies/${policy.id}?projectId=${projectId}&wiId=${wiId}`)
+      router.push(`/policies/${pol.id}?projectId=${projectId}&wiId=${wiId}`)
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         setGenerateResult({ kind: "draft_exists" })
@@ -99,6 +174,38 @@ export default function WorkItemDetailPage({
       }
     } finally {
       setGenerating(false)
+    }
+  }
+
+  async function handleExecute() {
+    setExecuteError("")
+    setExecuting(true)
+    try {
+      const res = await apiFetch<{ execution_id: string }>(`/work-items/${wiId}/executions`, {
+        method: "POST",
+      })
+      router.push(`/executions/${res.execution_id}`)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setExecuteError("An execution is already running for this work item.")
+      } else if (err instanceof ApiError && err.status === 422) {
+        const detail = (err.body as Record<string, unknown> | null)?.detail
+        const errorCode =
+          typeof detail === "object" && detail !== null
+            ? (detail as Record<string, unknown>).error
+            : null
+        if (errorCode === "no_published_policy") {
+          setExecuteError(
+            "No published policy — generate and publish a policy before starting an execution."
+          )
+        } else {
+          setExecuteError(err.message)
+        }
+      } else {
+        setExecuteError(err instanceof ApiError ? err.message : "Failed to start execution")
+      }
+    } finally {
+      setExecuting(false)
     }
   }
 
@@ -132,6 +239,7 @@ export default function WorkItemDetailPage({
   }
 
   const hasAiWorker = workItem.workers.some((w) => w.type === "ai_agent")
+  const currentStage = policy?.stages.find((s) => s.id === execution?.current_stage_id)
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -157,9 +265,9 @@ export default function WorkItemDetailPage({
           </p>
         </div>
 
-        {/* Generate Policy button */}
-        {hasAiWorker && (
-          <div className="shrink-0">
+        {/* Action buttons */}
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          {hasAiWorker && (
             <Button
               onClick={handleGeneratePolicy}
               disabled={generating}
@@ -177,9 +285,45 @@ export default function WorkItemDetailPage({
                 </>
               )}
             </Button>
-          </div>
-        )}
+          )}
+
+          {workItem.status !== "completed" && (
+            <Button
+              onClick={handleExecute}
+              disabled={executing}
+              variant="default"
+              size="sm"
+            >
+              {executing ? (
+                <>
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  Starting…
+                </>
+              ) : (
+                <>
+                  <Play className="mr-1.5 h-4 w-4" />
+                  Execute
+                </>
+              )}
+            </Button>
+          )}
+        </div>
       </div>
+
+      {/* Execute error */}
+      {executeError && (
+        <div className="mb-6">
+          {executeError.startsWith("An execution is already") ? (
+            <div className="rounded-lg border border-amber-300/60 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-300">
+              {executeError}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+              {executeError}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Generate result banners */}
       {generateResult && (
@@ -266,6 +410,108 @@ export default function WorkItemDetailPage({
             </div>
           )}
         </div>
+
+        {/* Policy section */}
+        <div>
+          <p className="mb-2 text-xs font-medium text-muted-foreground">POLICY</p>
+          {publishedPolicy ? (
+            <Link
+              href={`/policies/${publishedPolicy.id}?projectId=${projectId}&wiId=${wiId}`}
+              className="block rounded-lg border border-border px-4 py-3 hover:border-foreground/30 transition-colors"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">v{publishedPolicy.version}</span>
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                    published
+                  </span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {publishedPolicy.stages.length} stage{publishedPolicy.stages.length !== 1 ? "s" : ""}
+                  {publishedPolicy.checkpoints.length > 0 && ` · ${publishedPolicy.checkpoints.length} checkpoint${publishedPolicy.checkpoints.length !== 1 ? "s" : ""}`}
+                  {" →"}
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {publishedPolicy.stages.map((s) => (
+                  <span
+                    key={s.id}
+                    className="inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                  >
+                    {s.sequence}. {s.name}
+                  </span>
+                ))}
+              </div>
+            </Link>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No published policy.{hasAiWorker ? " Use Generate Policy to create one." : ""}
+            </p>
+          )}
+        </div>
+
+        {/* Execution panel */}
+        {execution && (
+          <div>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">EXECUTION</p>
+            <Link href={`/executions/${execution.id}`} className="block rounded-lg border border-border px-4 py-3 space-y-3 hover:border-foreground/30 transition-colors">
+              {/* Header row */}
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium">#{execution.execution_number} →</span>
+                <StatusBadge status={execution.status} />
+                {execution.started_at && (
+                  <span className="text-xs text-muted-foreground">
+                    started {timeAgo(execution.started_at)}
+                  </span>
+                )}
+                {!TERMINAL.has(execution.status) && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                )}
+              </div>
+
+              {/* Current stage */}
+              {execution.current_stage_id && (
+                <p className="text-sm text-muted-foreground">
+                  Current stage:{" "}
+                  <span className="font-medium text-foreground">
+                    {currentStage
+                      ? `Stage ${currentStage.sequence} — ${currentStage.name}`
+                      : `Stage …`}
+                  </span>
+                </p>
+              )}
+
+              {/* Blocking checkpoint */}
+              {execution.blocking_checkpoint && (
+                <div className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2.5 dark:border-purple-800/40 dark:bg-purple-900/20">
+                  <p className="text-xs font-medium text-purple-800 dark:text-purple-300 mb-1">
+                    ⏸ Waiting for {execution.blocking_checkpoint.type.replace(/_/g, " ")}
+                  </p>
+                  <p className="text-sm text-purple-900 dark:text-purple-200">
+                    {execution.blocking_checkpoint.instruction}
+                  </p>
+                  <p className="mt-1 text-xs text-purple-600 dark:text-purple-400">
+                    Assignee: {execution.blocking_checkpoint.assigned_user_id}
+                  </p>
+                </div>
+              )}
+
+              {/* Failure reason */}
+              {execution.status === "failed" && execution.error && (
+                <p className="text-sm text-destructive">
+                  ✗ {execution.error}
+                </p>
+              )}
+
+              {/* Completed */}
+              {execution.status === "completed" && execution.completed_at && (
+                <p className="text-xs text-muted-foreground">
+                  Completed {timeAgo(execution.completed_at)}
+                </p>
+              )}
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   )

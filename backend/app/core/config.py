@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     DOCS_SERVICE_ACCOUNT_EMAIL: str = ""
     DOCS_SHARE_WITH: str = ""
 
+    # Execution engine
+    STAGE_TIMEOUT_SECONDS: float = 300.0
+
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000"
 
