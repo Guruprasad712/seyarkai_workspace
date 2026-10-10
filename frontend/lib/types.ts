@@ -115,6 +115,17 @@ export type PolicyOut = {
   checkpoints: CheckpointOut[]
 }
 
+export type EventOut = {
+  id: string
+  execution_id: string
+  stage_id: string | null
+  event_type: string
+  actor_type: string
+  actor_id: string | null
+  payload: Record<string, unknown>
+  created_at: string
+}
+
 export type CheckpointBrief = {
   id: string
   type: string

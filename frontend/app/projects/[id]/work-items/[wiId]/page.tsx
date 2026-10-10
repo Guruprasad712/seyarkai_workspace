@@ -179,8 +179,7 @@ export default function WorkItemDetailPage({
       const res = await apiFetch<{ execution_id: string }>(`/work-items/${wiId}/executions`, {
         method: "POST",
       })
-      const exec = await apiFetch<ExecutionOut>(`/executions/${res.execution_id}`)
-      setExecution(exec)
+      router.push(`/executions/${res.execution_id}`)
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         setExecuteError("An execution is already running for this work item.")
