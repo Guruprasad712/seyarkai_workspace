@@ -174,3 +174,17 @@ export type ExecutionOut = {
   pending_summary: string | null
   created_at: string
 }
+
+export type KnowledgeDocument = {
+  id: string
+  title: string
+  content: string
+  source: string
+  last_verified_at: string
+  verified_by: string | null
+  external_id: string | null
+  age_days: number
+  freshness: "fresh" | "ageing" | "stale"
+  created_at: string
+  updated_at: string
+}

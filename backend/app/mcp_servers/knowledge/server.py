@@ -1,9 +1,22 @@
 from fastmcp import FastMCP
 
-from app.knowledge.retrievers import FakeRetriever
+from app.core.config import settings
+from app.core.db import AsyncSessionLocal
+from app.knowledge.retrievers import FakeRetriever, VertexSearchRetriever
 
 mcp = FastMCP("knowledge")
-_retriever = FakeRetriever()
+
+if settings.VERTEX_SEARCH_DATA_STORE_ID:
+    _retriever = VertexSearchRetriever(
+        db_session_factory=AsyncSessionLocal,
+        project=settings.GOOGLE_CLOUD_PROJECT,
+        location=settings.VERTEX_SEARCH_LOCATION,
+        data_store_id=settings.VERTEX_SEARCH_DATA_STORE_ID,
+        ageing_days=settings.KNOWLEDGE_AGEING_DAYS,
+        stale_days=settings.KNOWLEDGE_STALE_DAYS,
+    )
+else:
+    _retriever = FakeRetriever()
 
 
 @mcp.tool()

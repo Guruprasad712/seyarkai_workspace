@@ -95,6 +95,12 @@ function describeEvent(ev: EventOut): string {
     }
     case "execution.failed":
       return `Failed: ${p.error}`
+    case "human.message": {
+      const preview = String(p.preview ?? "")
+      return `Guidance: ${preview.length > 120 ? preview.slice(0, 120) + "…" : preview}`
+    }
+    case "knowledge.retrieved":
+      return `Knowledge: ${p.stale_count ? `${p.stale_count} stale doc(s) injected` : "docs injected"}`
     default:
       return ev.event_type
   }
@@ -219,6 +225,62 @@ function CheckpointActions({
       {error && (
         <p className="text-xs text-destructive">{error}</p>
       )}
+    </div>
+  )
+}
+
+// ─── Guidance Input ───────────────────────────────────────────────────────────
+
+function GuidanceInput({ executionId }: { executionId: string }) {
+  const [text, setText] = useState("")
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState("")
+
+  async function handleSend() {
+    if (!text.trim()) return
+    setError("")
+    setSending(true)
+    try {
+      await apiFetch(`/executions/${executionId}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ content: text.trim() }),
+      })
+      setText("")
+      setSent(true)
+      setTimeout(() => setSent(false), 3000)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to send")
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border">
+      <p className="text-xs font-medium text-muted-foreground mb-2">GUIDANCE</p>
+      <p className="text-xs text-muted-foreground mb-2">
+        Leave a note for the agent — it will be injected before the next stage.
+      </p>
+      <textarea
+        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+        rows={3}
+        placeholder="e.g. Focus on the error handling path…"
+        value={text}
+        onChange={e => setText(e.target.value)}
+        disabled={sending}
+      />
+      {error && <p className="text-xs text-destructive mt-1">{error}</p>}
+      {sent && <p className="text-xs text-green-600 dark:text-green-400 mt-1">Sent ✓</p>}
+      <Button
+        size="sm"
+        className="mt-2 w-full"
+        disabled={sending || !text.trim()}
+        onClick={handleSend}
+      >
+        {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+        {sending ? "Sending…" : "Send Guidance"}
+      </Button>
     </div>
   )
 }
@@ -789,6 +851,10 @@ export default function ExecutionWorkspacePage({
             </div>
           ) : TERMINAL.has(execution.status) ? null : (
             <p className="text-xs text-muted-foreground">No checkpoint pending.</p>
+          )}
+
+          {!TERMINAL.has(execution.status) && (
+            <GuidanceInput executionId={executionId} />
           )}
         </div>
       </div>

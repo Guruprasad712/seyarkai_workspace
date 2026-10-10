@@ -49,8 +49,16 @@ Date: 2026-10-11   Region: us-central1
 - [x] D5: Execution summary page — GET /executions/{id}/summary; ExecutionSummaryOut (per-stage agent output + checkpoint decisions + final review); Summary tab in workspace top bar (terminal executions only); SummaryView component with overview, work item, stages, final review sections
 - [x] D5: Work-item detail polish — entire execution panel box clickable; policy section between Workers and Execution (published policy with stage pills + checkpoint count, links to policy editor); human-readable no_published_policy execute error; 140 offline tests passing
 
+### Done (Day 6)
+- [x] D6: Knowledge module — KnowledgeDocument ORM (table existed in 0001), `compute_freshness()`, `build_injection_block()`, `VertexSearchRetriever` (asyncio.to_thread, offline-safe when data_store_id empty), `GET /knowledge`, `POST /knowledge` (best-effort Vertex index), `POST /knowledge/{id}/verify` (DB-only); google-cloud-discoveryengine==0.20.5 pinned; 25 knowledge tests
+- [x] D6: Knowledge injection into engine — `retriever` injectable on ExecutionEngine; knowledge block appended to stage task_text; `knowledge.retrieved` event emitted on hits; 3 engine injection tests
+- [x] D6: MCP knowledge server wired to VertexSearchRetriever (falls back to FakeRetriever offline)
+- [x] D6: Guidance messages — `POST /executions/{id}/messages`; stores Message (sender_type=human, message_type=guidance); emits `human.message` event; rejected on terminal executions; 5 tests; all 167 offline tests passing
+- [x] D6: Frontend /knowledge page — freshness badges (fresh/ageing/stale), summary stat chips, add document form, per-row Verify button; KnowledgeDocument type added to lib/types.ts
+- [x] D6: Frontend guidance input panel — GuidanceInput component in right column of execution workspace (non-terminal executions only); `human.message` and `knowledge.retrieved` event descriptions in timeline
+
 ### Next
-Day 6 — Guidance messages endpoint (POST /executions/{id}/messages); knowledge retrieval integration (Company Brain injection into stage task); POST /executions/{id}/ask (P1).
+Day 7 — POST /executions/{id}/ask (P1); document generation tool (google-docs via docs-generator SA); frontend: ask panel in execution workspace.
 
 ### Decision log
 - LLM access is Vertex AI via ADC; AI Studio prepay was unfunded so `GOOGLE_GENAI_USE_VERTEXAI=1` is the only working path.

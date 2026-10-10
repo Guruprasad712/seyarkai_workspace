@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from app.executions.models import Execution, ExecutionEvent, Message
+from app.executions.models import Execution, ExecutionEvent, Message  # noqa: F401
 from app.policies.models import Checkpoint, PolicyStage
 
 
@@ -150,3 +150,23 @@ class CheckpointResponseOut(BaseModel):
     execution_id: str
     status: str
     next_action: str
+
+
+class GuidanceMessageIn(BaseModel):
+    content: str
+
+
+class GuidanceMessageOut(BaseModel):
+    id: str
+    execution_id: str
+    content: str
+    created_at: datetime
+
+    @classmethod
+    def from_orm(cls, obj: Message) -> "GuidanceMessageOut":
+        return cls(
+            id=str(obj.id),
+            execution_id=str(obj.execution_id),
+            content=obj.content,
+            created_at=obj.created_at,
+        )

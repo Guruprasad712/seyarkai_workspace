@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.models import AgentVersion, AgentVersionTool, McpTool
 from app.core.config import settings
 from app.executions.models import Execution, ExecutionEvent, Message
+from app.knowledge.retrievers import KnowledgeRetriever, build_injection_block
 from app.policies.models import Checkpoint, Policy, PolicyStage
 from app.projects.models import Project  # noqa: F401 — ensures projects table is in mapper metadata
 from app.runtime import StageError, run_stage
@@ -76,8 +77,13 @@ async def _persist_event(
 
 
 class ExecutionEngine:
-    def __init__(self, session_factory: Any | None = None) -> None:
+    def __init__(
+        self,
+        session_factory: Any | None = None,
+        retriever: KnowledgeRetriever | None = None,
+    ) -> None:
         self._session_factory = session_factory
+        self._retriever = retriever
 
     def _get_session_factory(self):
         if self._session_factory is not None:
@@ -228,7 +234,45 @@ class ExecutionEngine:
                     for msg in prior_outputs:
                         task_text += f"\n---\n{msg.content[:2000]}"
 
-                # TODO(D7): inject knowledge block here
+                # Knowledge injection (D6)
+                retriever = self._retriever
+                if retriever is None:
+                    from app.knowledge.retrievers import VertexSearchRetriever
+                    retriever = VertexSearchRetriever(
+                        db_session_factory=self._get_session_factory(),
+                        project=settings.GOOGLE_CLOUD_PROJECT,
+                        location=settings.VERTEX_SEARCH_LOCATION,
+                        data_store_id=settings.VERTEX_SEARCH_DATA_STORE_ID,
+                        ageing_days=settings.KNOWLEDGE_AGEING_DAYS,
+                        stale_days=settings.KNOWLEDGE_STALE_DAYS,
+                    )
+                knowledge_query = f"{work_item.objective} {stage.description}"
+                try:
+                    hits = await retriever.search(
+                        knowledge_query, top_k=settings.KNOWLEDGE_TOP_K
+                    )
+                except Exception:
+                    hits = []
+
+                if hits:
+                    task_text += f"\n\n{build_injection_block(hits)}"
+                    await _persist_event(
+                        db, execution_id, sid,
+                        "knowledge.retrieved", "system",
+                        {
+                            "documents": [
+                                {
+                                    "id": h.document_id,
+                                    "title": h.title,
+                                    "age_days": h.age_days,
+                                    "freshness": h.freshness,
+                                }
+                                for h in hits
+                            ],
+                            "stale_count": sum(1 for h in hits if h.freshness == "stale"),
+                        },
+                    )
+                    await db.commit()
 
                 # Consume pending human guidance
                 result = await db.execute(

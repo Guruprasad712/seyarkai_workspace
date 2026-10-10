@@ -22,6 +22,8 @@ from app.executions.schemas import (
     EventOut,
     ExecutionOut,
     ExecutionSummaryOut,
+    GuidanceMessageIn,
+    GuidanceMessageOut,
     StageSummary,
 )
 from app.policies.models import Checkpoint, Policy, PolicyStage
@@ -518,3 +520,64 @@ async def respond_to_checkpoint(
         status=execution.status,
         next_action=next_action,
     )
+
+
+@router.post(
+    "/executions/{execution_id}/messages",
+    response_model=GuidanceMessageOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def send_guidance_message(
+    execution_id: str,
+    body: GuidanceMessageIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Execution).where(Execution.id == execution_id))
+    execution = result.scalar_one_or_none()
+    if execution is None:
+        raise HTTPException(status_code=404, detail="execution not found")
+
+    if execution.status in _TERMINAL_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "execution_terminal",
+                "message": f"cannot send guidance to a {execution.status} execution",
+            },
+        )
+
+    if not body.content.strip():
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "content_empty", "message": "content must not be blank"},
+        )
+
+    now = datetime.now(timezone.utc)
+    msg = Message(
+        id=uuid.uuid4(),
+        execution_id=execution_id,
+        stage_id=execution.current_stage_id,
+        sender_type="human",
+        sender_id=current_user.id,
+        message_type="guidance",
+        content=body.content.strip(),
+        consumed_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(msg)
+
+    db.add(ExecutionEvent(
+        id=uuid.uuid4(),
+        execution_id=execution_id,
+        stage_id=str(execution.current_stage_id) if execution.current_stage_id else None,
+        event_type="human.message",
+        actor_type="human",
+        actor_id=current_user.id,
+        payload={"message_id": str(msg.id), "preview": body.content.strip()[:200]},
+        created_at=now,
+    ))
+
+    await db.commit()
+    return GuidanceMessageOut.from_orm(msg)
