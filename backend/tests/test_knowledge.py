@@ -470,3 +470,29 @@ async def test_engine_empty_hits_skips_event(ki_setup, test_db_url: str):
         event_types = [row.event_type for row in result.fetchall()]
 
     assert "knowledge.retrieved" not in event_types
+
+
+# ─── Search endpoint ──────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_search_knowledge_offline_returns_empty(
+    async_client: AsyncClient, auth_headers: dict
+):
+    # VERTEX_SEARCH_DATA_STORE_ID is empty in test env → should return [] without error
+    resp = await async_client.get(
+        "/knowledge/search", params={"q": "payment terms"}, headers=auth_headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_search_knowledge_requires_auth(async_client: AsyncClient):
+    resp = await async_client.get("/knowledge/search", params={"q": "test"})
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_search_knowledge_requires_q(async_client: AsyncClient, auth_headers: dict):
+    resp = await async_client.get("/knowledge/search", headers=auth_headers)
+    assert resp.status_code == 422

@@ -4,16 +4,17 @@ import sys
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.core.config import settings
-from app.core.db import get_db
+from app.core.db import AsyncSessionLocal, get_db
 from app.knowledge.models import KnowledgeDocument
-from app.knowledge.schemas import KnowledgeDocumentIn, KnowledgeDocumentOut
+from app.knowledge.retrievers import VertexSearchRetriever
+from app.knowledge.schemas import KnowledgeDocumentIn, KnowledgeDocumentOut, KnowledgeHitOut
 
 router = APIRouter()
 
@@ -85,6 +86,26 @@ async def verify_knowledge(
     await db.commit()
     await db.refresh(doc)
     return _to_out(doc)
+
+
+@router.get("/knowledge/search", response_model=list[KnowledgeHitOut])
+async def search_knowledge(
+    q: str = Query(..., min_length=1),
+    top_k: int = Query(default=5, ge=1, le=20),
+    _: User = Depends(get_current_user),
+):
+    if not settings.VERTEX_SEARCH_DATA_STORE_ID:
+        return []
+    retriever = VertexSearchRetriever(
+        db_session_factory=AsyncSessionLocal,
+        project=settings.GOOGLE_CLOUD_PROJECT,
+        location=settings.VERTEX_SEARCH_LOCATION,
+        data_store_id=settings.VERTEX_SEARCH_DATA_STORE_ID,
+        ageing_days=settings.KNOWLEDGE_AGEING_DAYS,
+        stale_days=settings.KNOWLEDGE_STALE_DAYS,
+    )
+    hits = await retriever.search(q, top_k)
+    return [KnowledgeHitOut.from_hit(h) for h in hits]
 
 
 async def _index_document(doc: KnowledgeDocument) -> None:

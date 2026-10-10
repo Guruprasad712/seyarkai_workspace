@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pydantic import BaseModel
 
 from app.knowledge.models import KnowledgeDocument
-from app.knowledge.retrievers import compute_freshness
+from app.knowledge.retrievers import KnowledgeHit, compute_freshness
 
 
 class KnowledgeDocumentIn(BaseModel):
@@ -51,4 +51,26 @@ class KnowledgeDocumentOut(BaseModel):
             freshness=compute_freshness(age_days, ageing_days, stale_days),
             created_at=doc.created_at,
             updated_at=doc.updated_at,
+        )
+
+
+class KnowledgeHitOut(BaseModel):
+    document_id: str
+    title: str
+    snippet: str
+    score: float
+    last_verified_at: datetime
+    age_days: int
+    freshness: str
+
+    @classmethod
+    def from_hit(cls, hit: KnowledgeHit) -> "KnowledgeHitOut":
+        return cls(
+            document_id=hit.document_id,
+            title=hit.title,
+            snippet=hit.snippet,
+            score=hit.score,
+            last_verified_at=hit.last_verified_at,
+            age_days=hit.age_days,
+            freshness=hit.freshness,
         )
