@@ -38,8 +38,11 @@ Date: 2026-10-08   Region: us-central1
 - [x] D4: Policy editor UI — /policies/[policyId] three-panel layout (agents left, workflow center, checkpoints right); add/edit/delete/reorder stages; per-stage and final_review checkpoints; publish with inline failure display; auto-nav from work item after generate; read-only published state; new types: StageOut, CheckpointOut, PolicyOut in lib/types.ts
 - [x] D4: Fix login redirect — replaced router.replace("/") with window.location.href="/" so cookie is flushed before proxy.ts middleware evaluates the next request
 
+### Done (Day 5, so far)
+- [x] D5: Execution engine (Phase 1) — POST /work-items/{id}/executions (202, no-policy 422, active-exists 409, new→in_progress transition), GET /executions/{id} with blocking_checkpoint resolved, GET /work-items/{id}/executions ordered by execution_number; 8 offline tests; all 114 offline tests passing
+
 ### Next
-Day 5 — Execution engine (backend: run work item, stage execution, checkpoint responses, SSE events; frontend: execution status, stage events, checkpoint approvals).
+Day 5 (Phase 2) — Execution engine continued (SSE event stream, ADK stage runner integration, checkpoint responses, guidance messages; frontend: execution status page, stage events, checkpoint approvals).
 
 ### Decision log
 - LLM access is Vertex AI via ADC; AI Studio prepay was unfunded so `GOOGLE_GENAI_USE_VERTEXAI=1` is the only working path.
