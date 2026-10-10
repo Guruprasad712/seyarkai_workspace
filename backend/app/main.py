@@ -1,7 +1,9 @@
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -11,6 +13,8 @@ from app.core.security import decode_token
 
 # Routes that do not require a token.
 _AUTH_ALLOWLIST = {("/health", "GET"), ("/auth/login", "POST")}
+
+_ARTIFACTS_DIR = Path(__file__).resolve().parent.parent / "artifacts"
 
 
 def create_app() -> FastAPI:
@@ -40,6 +44,9 @@ def create_app() -> FastAPI:
             return await call_next(request)
         if (request.url.path, request.method) in _AUTH_ALLOWLIST:
             return await call_next(request)
+        # Artifact HTML files are publicly shareable
+        if request.url.path.startswith("/artifacts/"):
+            return await call_next(request)
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             return JSONResponse(status_code=401, content={"detail": "not authenticated"})
@@ -57,6 +64,13 @@ def create_app() -> FastAPI:
     app.include_router(policies_router, tags=["policies"])
     app.include_router(executions_router, tags=["executions"])
     app.include_router(knowledge_router, tags=["knowledge"])
+
+    @app.get("/artifacts/{filename}")
+    async def serve_artifact(filename: str):
+        path = _ARTIFACTS_DIR / filename
+        if not path.exists() or path.suffix != ".html":
+            return JSONResponse(status_code=404, content={"detail": "not found"})
+        return FileResponse(path, media_type="text/html")
 
     @app.get("/health")
     async def health():

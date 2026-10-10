@@ -90,14 +90,22 @@ def normalise(event: Any) -> list[dict]:
             })
 
         elif fn_resp is not None:
-            summary = _unwrap_function_response(fn_resp.response)
-            results.append({
-                "event_type": "tool.result",
-                "payload": {
-                    "tool_name": fn_resp.name,
-                    "summary": summary,
-                },
-            })
+            raw_resp = fn_resp.response
+            summary = _unwrap_function_response(raw_resp)
+            payload: dict = {"tool_name": fn_resp.name, "summary": summary}
+
+            # Preserve the raw dict for tools that return structured data
+            # (FastMCP dict-return path: structuredContent = the dict itself).
+            # The engine uses this to write artifact rows without parsing a repr string.
+            sc = raw_resp.get("structuredContent") if isinstance(raw_resp, dict) else None
+            if sc is not None and isinstance(sc, dict):
+                meta = raw_resp.get("meta") or {}
+                wrap = (meta.get("fastmcp") or {}).get("wrap_result", False)
+                structured = sc.get("result") if wrap else sc
+                if isinstance(structured, dict):
+                    payload["structured_result"] = structured
+
+            results.append({"event_type": "tool.result", "payload": payload})
 
         elif text is not None and is_final:
             results.append({

@@ -99,17 +99,34 @@ class VertexSearchRetriever(KnowledgeRetriever):
         from sqlalchemy import select
         from app.knowledge.models import KnowledgeDocument
 
-        doc_ids = [r["id"] for r in results]
+        import uuid as _uuid
+
+        def _normalize_uuid(v: str) -> str | None:
+            try:
+                return str(_uuid.UUID(v))
+            except ValueError:
+                return None
+
+        # Normalize IDs: Vertex strips hyphens; DB stores canonical hyphenated UUIDs
+        id_map: dict[str, str] = {}  # vertex_id -> canonical_uuid
+        for r in results:
+            canonical = _normalize_uuid(r["id"])
+            if canonical:
+                id_map[r["id"]] = canonical
+
+        if not id_map:
+            return []
         async with self._db_session_factory() as db:
             rows = await db.execute(
-                select(KnowledgeDocument).where(KnowledgeDocument.id.in_(doc_ids))
+                select(KnowledgeDocument).where(KnowledgeDocument.id.in_(list(id_map.values())))
             )
             docs = {str(doc.id): doc for doc in rows.scalars().all()}
 
         now = datetime.now(timezone.utc)
         hits: list[KnowledgeHit] = []
         for r in results:
-            doc = docs.get(r["id"])
+            canonical = id_map.get(r["id"])
+            doc = docs.get(canonical) if canonical else None
             if doc is None:
                 continue
             lv = doc.last_verified_at

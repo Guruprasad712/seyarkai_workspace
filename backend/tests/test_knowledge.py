@@ -478,10 +478,13 @@ async def test_engine_empty_hits_skips_event(ki_setup, test_db_url: str):
 async def test_search_knowledge_offline_returns_empty(
     async_client: AsyncClient, auth_headers: dict
 ):
-    # VERTEX_SEARCH_DATA_STORE_ID is empty in test env → should return [] without error
-    resp = await async_client.get(
-        "/knowledge/search", params={"q": "payment terms"}, headers=auth_headers
-    )
+    # Patch settings.VERTEX_SEARCH_DATA_STORE_ID at the router's import site
+    from unittest.mock import patch, PropertyMock
+    with patch("app.knowledge.router.settings") as mock_settings:
+        mock_settings.VERTEX_SEARCH_DATA_STORE_ID = ""
+        resp = await async_client.get(
+            "/knowledge/search", params={"q": "payment terms"}, headers=auth_headers
+        )
     assert resp.status_code == 200, resp.text
     assert resp.json() == []
 

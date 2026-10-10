@@ -127,14 +127,19 @@ async def _index_document(doc: KnowledgeDocument) -> None:
             f"/dataStores/{settings.VERTEX_SEARCH_DATA_STORE_ID}"
             f"/branches/default_branch"
         )
+        # Build full text for content field (required by CONTENT_REQUIRED data stores)
+        full_text = f"{doc.title}\n\n{doc.content}"
         document = de.Document(
             id=str(doc.id),
             json_data=json.dumps({
                 "title": doc.title,
-                "content": doc.content,
                 "source": doc.source,
                 "last_verified_at": doc.last_verified_at.isoformat(),
             }),
+            content=de.Document.Content(
+                raw_bytes=full_text.encode("utf-8"),
+                mime_type="text/plain",
+            ),
         )
         inline_source = de.ImportDocumentsRequest.InlineSource(documents=[document])
         request = de.ImportDocumentsRequest(

@@ -235,6 +235,7 @@ async def work_item_with_policy(test_db_url: str, auth_headers, published_agent_
     }
 
     async with _test_db(test_db_url) as db:
+        await db.execute(text("DELETE FROM artifacts WHERE execution_id IN (SELECT id FROM executions WHERE work_item_id = :wid)"), {"wid": wi_id})
         await db.execute(text("DELETE FROM execution_events WHERE execution_id IN (SELECT id FROM executions WHERE work_item_id = :wid)"), {"wid": wi_id})
         await db.execute(text("DELETE FROM messages WHERE execution_id IN (SELECT id FROM executions WHERE work_item_id = :wid)"), {"wid": wi_id})
         await db.execute(text("DELETE FROM checkpoint_responses WHERE execution_id IN (SELECT id FROM executions WHERE work_item_id = :wid)"), {"wid": wi_id})
@@ -506,3 +507,48 @@ async def test_send_guidance_message_not_found(
         headers=auth_headers,
     )
     assert r.status_code == 404, r.text
+
+
+@pytest.mark.asyncio
+async def test_get_execution_includes_artifacts(
+    async_client: AsyncClient, auth_headers, work_item_with_policy, test_db_url: str
+):
+    """GET /executions/{id} returns artifacts array with correct fields."""
+    wi_id = work_item_with_policy["work_item_id"]
+    stage_id = work_item_with_policy["stage_id"]
+
+    # Create an execution
+    r = await async_client.post(f"/work-items/{wi_id}/executions", headers=auth_headers)
+    exec_id = r.json()["execution_id"]
+
+    # Insert an artifact row directly
+    artifact_id = str(uuid.uuid4())
+    async with _test_db(test_db_url) as db:
+        await db.execute(
+            text(
+                "INSERT INTO artifacts (id, execution_id, stage_id, name, type, url, created_at) "
+                "VALUES (:id, :eid, :sid, :name, :type, :url, now())"
+            ),
+            {
+                "id": artifact_id,
+                "eid": exec_id,
+                "sid": stage_id,
+                "name": "Stage 1 — google-doc-abc",
+                "type": "google_doc",
+                "url": "https://docs.google.com/document/d/abc/edit",
+            },
+        )
+        await db.commit()
+
+    r2 = await async_client.get(f"/executions/{exec_id}", headers=auth_headers)
+    assert r2.status_code == 200, r2.text
+    body = r2.json()
+
+    assert "artifacts" in body
+    assert len(body["artifacts"]) == 1
+    a = body["artifacts"][0]
+    assert a["id"] == artifact_id
+    assert a["name"] == "Stage 1 — google-doc-abc"
+    assert a["type"] == "google_doc"
+    assert a["url"] == "https://docs.google.com/document/d/abc/edit"
+    assert a["stage_id"] == stage_id

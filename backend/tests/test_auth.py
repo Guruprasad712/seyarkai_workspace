@@ -237,6 +237,8 @@ async def test_every_registered_route_requires_auth(async_client: AsyncClient):
     from app.main import app
 
     _ALLOWLIST = {("/health", "GET"), ("/auth/login", "POST")}
+    # Artifact HTML files are publicly shareable (no auth required)
+    _ALLOWLIST_PREFIXES = {"/artifacts/"}
 
     missing_auth: list[str] = []
     for route in app.routes:
@@ -248,6 +250,8 @@ async def test_every_registered_route_requires_auth(async_client: AsyncClient):
             if method == "OPTIONS":
                 continue
             if (path, method) in _ALLOWLIST:
+                continue
+            if any(path.startswith(p) for p in _ALLOWLIST_PREFIXES):
                 continue
             r = await async_client.request(method, path)
             if r.status_code != 401:

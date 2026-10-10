@@ -173,6 +173,7 @@ async def engine_setup(test_db_url: str):
     }
 
     async with _test_db(test_db_url) as db:
+        await db.execute(text("DELETE FROM artifacts WHERE execution_id = :eid"), {"eid": execution_id})
         await db.execute(text("DELETE FROM execution_events WHERE execution_id = :eid"), {"eid": execution_id})
         await db.execute(text("DELETE FROM messages WHERE execution_id = :eid"), {"eid": execution_id})
         await db.execute(text("DELETE FROM executions WHERE id = :eid"), {"eid": execution_id})
@@ -514,3 +515,78 @@ async def test_engine_summary_error_does_not_block_checkpoint(engine_setup, test
     assert row.status == "waiting_for_approval"
     assert row.pending_summary is None
     assert len(checkpoint_events) == 1
+
+
+@pytest.mark.asyncio
+async def test_engine_artifact_created_on_generate_document(engine_setup, test_db_url: str):
+    """generate_document tool.result with structured_result → artifacts row + artifact.created event."""
+    exc_id = engine_setup["execution_id"]
+    stage_id = engine_setup["stage_id"]
+    doc_url = "https://docs.google.com/document/d/google-doc-123/edit"
+
+    async def _doc_mock(*args, **kwargs):
+        yield {
+            "event_type": "tool.result",
+            "payload": {
+                "tool_name": "generate_document",
+                "summary": "{'document_id': 'google-doc-123', 'url': '" + doc_url + "'}",
+                "structured_result": {"document_id": "google-doc-123", "url": doc_url},
+            },
+        }
+        yield {"event_type": "stage.stream_end", "payload": {"final_text": "Report done.", "total_tokens": {}}}
+
+    with patch("app.executions.engine.run_stage", side_effect=_doc_mock):
+        await ExecutionEngine(_make_factory(test_db_url)).run_execution(exc_id)
+
+    async with _test_db(test_db_url) as db:
+        result = await db.execute(
+            text("SELECT url, type, stage_id FROM artifacts WHERE execution_id = :eid"),
+            {"eid": exc_id},
+        )
+        artifact_row = result.one()
+
+        result2 = await db.execute(
+            text(
+                "SELECT payload FROM execution_events "
+                "WHERE execution_id = :eid AND event_type = 'artifact.created'"
+            ),
+            {"eid": exc_id},
+        )
+        artifact_event = result2.one()
+
+    assert artifact_row.url == doc_url
+    assert artifact_row.type == "google_doc"
+    assert str(artifact_row.stage_id) == stage_id
+    assert artifact_event.payload["url"] == doc_url
+    assert "artifact_id" in artifact_event.payload
+
+
+@pytest.mark.asyncio
+async def test_engine_artifact_html_fallback_type(engine_setup, test_db_url: str):
+    """generate_document with html- document_id → artifact.type = 'html'."""
+    exc_id = engine_setup["execution_id"]
+    html_id = f"html-{uuid.uuid4()}"
+    html_url = f"http://localhost:8000/artifacts/{html_id.removeprefix('html-')}.html"
+
+    async def _html_mock(*args, **kwargs):
+        yield {
+            "event_type": "tool.result",
+            "payload": {
+                "tool_name": "generate_document",
+                "summary": f"{{'document_id': '{html_id}', 'url': '{html_url}'}}",
+                "structured_result": {"document_id": html_id, "url": html_url},
+            },
+        }
+        yield {"event_type": "stage.stream_end", "payload": {"final_text": "done", "total_tokens": {}}}
+
+    with patch("app.executions.engine.run_stage", side_effect=_html_mock):
+        await ExecutionEngine(_make_factory(test_db_url)).run_execution(exc_id)
+
+    async with _test_db(test_db_url) as db:
+        result = await db.execute(
+            text("SELECT type FROM artifacts WHERE execution_id = :eid"),
+            {"eid": exc_id},
+        )
+        artifact_type = result.scalar_one()
+
+    assert artifact_type == "html"

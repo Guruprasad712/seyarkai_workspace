@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.models import AgentVersion, AgentVersionTool, McpTool
 from app.core.config import settings
-from app.executions.models import Execution, ExecutionEvent, Message
+from app.executions.models import Artifact, Execution, ExecutionEvent, Message
 from app.knowledge.retrievers import KnowledgeRetriever, build_injection_block
 from app.policies.models import Checkpoint, Policy, PolicyStage
 from app.projects.models import Project  # noqa: F401 — ensures projects table is in mapper metadata
@@ -317,9 +317,41 @@ class ExecutionEngine:
                         await db.commit()
                         break
 
-                    # Persist the contract event; truncate agent.message to preview
+                    # Detect generate_document tool result → write artifact row + event
+                    if (
+                        event["event_type"] == "tool.result"
+                        and event["payload"].get("tool_name") == "generate_document"
+                    ):
+                        structured = event["payload"].get("structured_result")
+                        if isinstance(structured, dict):
+                            doc_id = structured.get("document_id", "")
+                            url = structured.get("url", "")
+                            artifact_type = "html" if doc_id.startswith("html-") else "google_doc"
+                            artifact_name = f"{stage.name} — {doc_id}"
+                            artifact = Artifact(
+                                id=uuid.uuid4(),
+                                execution_id=execution_id,
+                                stage_id=stage.id,
+                                name=artifact_name,
+                                type=artifact_type,
+                                url=url,
+                                created_at=_now(),
+                            )
+                            db.add(artifact)
+                            await _persist_event(
+                                db, execution_id, sid,
+                                "artifact.created", "agent",
+                                {"artifact_id": str(artifact.id), "name": artifact_name, "url": url},
+                            )
+                            await db.commit()
+                        # Fall through — also persist the tool.result event below
+
+                    # Persist the contract event; strip internal keys, truncate agent.message
                     payload = event["payload"]
-                    if event["event_type"] == "agent.message":
+                    if event["event_type"] == "tool.result":
+                        # structured_result is engine-internal — never stored in DB
+                        payload = {k: v for k, v in payload.items() if k != "structured_result"}
+                    elif event["event_type"] == "agent.message":
                         payload = {"preview": event["payload"].get("text", "")[:500]}
 
                     await _persist_event(
