@@ -74,6 +74,7 @@ export default function WorkItemDetailPage({
   // Execution state
   const [execution, setExecution] = useState<ExecutionOut | null>(null)
   const [policy, setPolicy] = useState<PolicyOut | null>(null)
+  const [publishedPolicy, setPublishedPolicy] = useState<PolicyOut | null>(null)
   const [executing, setExecuting] = useState(false)
   const [executeError, setExecuteError] = useState("")
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -82,15 +83,19 @@ export default function WorkItemDetailPage({
     setLoading(true)
     setError("")
     try {
-      const [wi, execs] = await Promise.all([
+      const [wi, execs, policies] = await Promise.all([
         apiFetch<WorkItem>(`/work-items/${wiId}`),
         apiFetch<ExecutionOut[]>(`/work-items/${wiId}/executions`).catch(() => [] as ExecutionOut[]),
+        apiFetch<PolicyOut[]>(`/work-items/${wiId}/policies`).catch(() => [] as PolicyOut[]),
       ])
       setWorkItem(wi)
       if (execs.length > 0) {
         const latest = execs[execs.length - 1]
         setExecution(latest)
       }
+      const published = policies.filter((p) => p.status === "published")
+      const pub = published.sort((a, b) => b.version - a.version)[0] ?? null
+      setPublishedPolicy(pub)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load work item")
     } finally {
@@ -102,7 +107,7 @@ export default function WorkItemDetailPage({
     load()
   }, [load])
 
-  // Load policy once we know the policy_id
+  // Load policy once we know the policy_id (for stage name resolution in execution panel)
   useEffect(() => {
     if (!execution?.policy_id || policy?.id === execution.policy_id) return
     apiFetch<PolicyOut>(`/policies/${execution.policy_id}`)
@@ -183,6 +188,19 @@ export default function WorkItemDetailPage({
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         setExecuteError("An execution is already running for this work item.")
+      } else if (err instanceof ApiError && err.status === 422) {
+        const detail = (err.body as Record<string, unknown> | null)?.detail
+        const errorCode =
+          typeof detail === "object" && detail !== null
+            ? (detail as Record<string, unknown>).error
+            : null
+        if (errorCode === "no_published_policy") {
+          setExecuteError(
+            "No published policy — generate and publish a policy before starting an execution."
+          )
+        } else {
+          setExecuteError(err.message)
+        }
       } else {
         setExecuteError(err instanceof ApiError ? err.message : "Failed to start execution")
       }
@@ -393,14 +411,53 @@ export default function WorkItemDetailPage({
           )}
         </div>
 
+        {/* Policy section */}
+        <div>
+          <p className="mb-2 text-xs font-medium text-muted-foreground">POLICY</p>
+          {publishedPolicy ? (
+            <Link
+              href={`/policies/${publishedPolicy.id}?projectId=${projectId}&wiId=${wiId}`}
+              className="block rounded-lg border border-border px-4 py-3 hover:border-foreground/30 transition-colors"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">v{publishedPolicy.version}</span>
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                    published
+                  </span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {publishedPolicy.stages.length} stage{publishedPolicy.stages.length !== 1 ? "s" : ""}
+                  {publishedPolicy.checkpoints.length > 0 && ` · ${publishedPolicy.checkpoints.length} checkpoint${publishedPolicy.checkpoints.length !== 1 ? "s" : ""}`}
+                  {" →"}
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {publishedPolicy.stages.map((s) => (
+                  <span
+                    key={s.id}
+                    className="inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                  >
+                    {s.sequence}. {s.name}
+                  </span>
+                ))}
+              </div>
+            </Link>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No published policy.{hasAiWorker ? " Use Generate Policy to create one." : ""}
+            </p>
+          )}
+        </div>
+
         {/* Execution panel */}
         {execution && (
           <div>
             <p className="mb-2 text-xs font-medium text-muted-foreground">EXECUTION</p>
-            <div className="rounded-lg border border-border px-4 py-3 space-y-3">
+            <Link href={`/executions/${execution.id}`} className="block rounded-lg border border-border px-4 py-3 space-y-3 hover:border-foreground/30 transition-colors">
               {/* Header row */}
               <div className="flex items-center gap-3">
-                <span className="text-sm font-medium">#{execution.execution_number}</span>
+                <span className="text-sm font-medium">#{execution.execution_number} →</span>
                 <StatusBadge status={execution.status} />
                 {execution.started_at && (
                   <span className="text-xs text-muted-foreground">
@@ -452,7 +509,7 @@ export default function WorkItemDetailPage({
                   Completed {timeAgo(execution.completed_at)}
                 </p>
               )}
-            </div>
+            </Link>
           </div>
         )}
       </div>

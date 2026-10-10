@@ -26,6 +26,34 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+_SUMMARY_PROMPT = (
+    "Summarize your work in this stage.\n"
+    "Include: what you were asked to do, what you actually did, tools you used and their "
+    "results, any issues or blockers, and your recommendation (ready for approval or needs "
+    "changes). Be clear and concise — speak as a coworker explaining to your manager."
+)
+
+
+async def _call_summary_stage(
+    agent_definition: dict,
+    tool_names: list[str],
+    timeout_seconds: float,
+) -> str | None:
+    try:
+        async for event in run_stage(
+            agent_definition,
+            _SUMMARY_PROMPT,
+            tool_names,
+            max_llm_calls=1,
+            timeout_seconds=timeout_seconds,
+        ):
+            if event["event_type"] == "stage.stream_end":
+                return event["payload"].get("final_text") or None
+    except StageError:
+        pass
+    return None
+
+
 async def _persist_event(
     db: AsyncSession,
     execution_id: str,
@@ -130,6 +158,9 @@ class ExecutionEngine:
         await db.commit()
 
         total_stages = len(stages)
+        # Retained after loop to reuse for final-review summary
+        last_agent_definition: dict = {}
+        last_tool_names: list[str] = []
 
         try:
             # --------------------------------------------------------------
@@ -162,6 +193,8 @@ class ExecutionEngine:
                     "instructions": agent_version.instructions,
                     "capabilities": agent_version.capabilities or [],
                 }
+                last_agent_definition = agent_definition
+                last_tool_names = tool_names
 
                 await _persist_event(
                     db, execution_id, sid,
@@ -262,6 +295,17 @@ class ExecutionEngine:
                 # Check for a checkpoint on this stage
                 cp = checkpoint_by_stage.get(sid)
                 if cp is not None:
+                    # Collect agent summary before pausing (best-effort)
+                    summary_text = await _call_summary_stage(
+                        agent_definition, tool_names, settings.STAGE_TIMEOUT_SECONDS
+                    )
+                    execution.pending_summary = summary_text
+                    if summary_text:
+                        await _persist_event(
+                            db, execution_id, sid,
+                            "agent.summary", "agent",
+                            {"summary": summary_text},
+                        )
                     now = _now()
                     execution.status = "waiting_for_approval"
                     execution.blocking_checkpoint_id = cp.id
@@ -288,6 +332,18 @@ class ExecutionEngine:
             # --------------------------------------------------------------
             now = _now()
             if final_review_checkpoint is not None:
+                # Collect agent summary before final-review pause (best-effort)
+                if last_agent_definition:
+                    summary_text = await _call_summary_stage(
+                        last_agent_definition, last_tool_names, settings.STAGE_TIMEOUT_SECONDS
+                    )
+                    execution.pending_summary = summary_text
+                    if summary_text:
+                        await _persist_event(
+                            db, execution_id, None,
+                            "agent.summary", "agent",
+                            {"summary": summary_text},
+                        )
                 execution.status = "waiting_for_approval"
                 execution.blocking_checkpoint_id = final_review_checkpoint.id
                 execution.updated_at = now

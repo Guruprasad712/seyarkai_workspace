@@ -4,8 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from app.executions.models import Execution, ExecutionEvent
-from app.policies.models import Checkpoint
+from app.executions.models import Execution, ExecutionEvent, Message
+from app.policies.models import Checkpoint, PolicyStage
 
 
 class CreateExecutionResponse(BaseModel):
@@ -41,6 +41,7 @@ class ExecutionOut(BaseModel):
     started_at: datetime | None
     completed_at: datetime | None
     error: str | None
+    pending_summary: str | None
     created_at: datetime
 
     @classmethod
@@ -60,6 +61,7 @@ class ExecutionOut(BaseModel):
             started_at=obj.started_at,
             completed_at=obj.completed_at,
             error=obj.error,
+            pending_summary=obj.pending_summary,
             created_at=obj.created_at,
         )
 
@@ -86,6 +88,56 @@ class EventOut(BaseModel):
             payload=obj.payload,
             created_at=obj.created_at,
         )
+
+
+class StageSummary(BaseModel):
+    sequence: int
+    name: str
+    description: str
+    expected_output: str
+    agent_output: str | None
+    checkpoint_decision: str | None
+    checkpoint_comment: str | None
+    checkpoint_type: str | None
+
+    @classmethod
+    def build(
+        cls,
+        stage: PolicyStage,
+        output_msg: Message | None,
+        cp_response: "CheckpointResponseRow | None",
+        cp_type: str | None,
+    ) -> "StageSummary":
+        return cls(
+            sequence=stage.sequence,
+            name=stage.name,
+            description=stage.description,
+            expected_output=stage.expected_output,
+            agent_output=output_msg.content if output_msg else None,
+            checkpoint_decision=cp_response.decision if cp_response else None,
+            checkpoint_comment=cp_response.comment if cp_response else None,
+            checkpoint_type=cp_type,
+        )
+
+
+class CheckpointResponseRow(BaseModel):
+    decision: str
+    comment: str | None
+
+
+class ExecutionSummaryOut(BaseModel):
+    execution_id: str
+    execution_number: int
+    status: str
+    started_at: datetime | None
+    completed_at: datetime | None
+    error: str | None
+    work_item_objective: str
+    work_item_description: str
+    work_item_expected_outcome: str
+    stages: list[StageSummary]
+    final_review_decision: str | None
+    final_review_comment: str | None
 
 
 class CheckpointResponseIn(BaseModel):

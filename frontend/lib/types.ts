@@ -115,6 +115,32 @@ export type PolicyOut = {
   checkpoints: CheckpointOut[]
 }
 
+export type StageSummary = {
+  sequence: number
+  name: string
+  description: string
+  expected_output: string
+  agent_output: string | null
+  checkpoint_decision: string | null
+  checkpoint_comment: string | null
+  checkpoint_type: string | null
+}
+
+export type ExecutionSummaryOut = {
+  execution_id: string
+  execution_number: number
+  status: string
+  started_at: string | null
+  completed_at: string | null
+  error: string | null
+  work_item_objective: string
+  work_item_description: string
+  work_item_expected_outcome: string
+  stages: StageSummary[]
+  final_review_decision: string | null
+  final_review_comment: string | null
+}
+
 export type EventOut = {
   id: string
   execution_id: string
@@ -145,5 +171,6 @@ export type ExecutionOut = {
   started_at: string | null
   completed_at: string | null
   error: string | null
+  pending_summary: string | null
   created_at: string
 }

@@ -17,9 +17,12 @@ from app.executions.models import Execution, ExecutionEvent, CheckpointResponse,
 from app.executions.schemas import (
     CheckpointResponseIn,
     CheckpointResponseOut,
+    CheckpointResponseRow,
     CreateExecutionResponse,
     EventOut,
     ExecutionOut,
+    ExecutionSummaryOut,
+    StageSummary,
 )
 from app.policies.models import Checkpoint, Policy, PolicyStage
 from app.work_items.models import WorkItem
@@ -129,6 +132,95 @@ async def get_execution(
         blocking_checkpoint = result.scalar_one_or_none()
 
     return ExecutionOut.from_orm(execution, blocking_checkpoint)
+
+
+@router.get("/executions/{execution_id}/summary", response_model=ExecutionSummaryOut)
+async def get_execution_summary(
+    execution_id: str,
+    _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Execution).where(Execution.id == execution_id))
+    execution = result.scalar_one_or_none()
+    if execution is None:
+        raise HTTPException(status_code=404, detail="execution not found")
+
+    # Work item
+    result = await db.execute(select(WorkItem).where(WorkItem.id == execution.work_item_id))
+    work_item = result.scalar_one()
+
+    # Policy stages ordered by sequence
+    result = await db.execute(
+        select(PolicyStage)
+        .where(PolicyStage.policy_id == execution.policy_id)
+        .order_by(PolicyStage.sequence)
+    )
+    stages = list(result.scalars().all())
+
+    # All checkpoints for this policy, indexed by stage_id
+    result = await db.execute(
+        select(Checkpoint).where(Checkpoint.policy_id == execution.policy_id)
+    )
+    checkpoints = list(result.scalars().all())
+    cp_by_stage: dict[str | None, Checkpoint] = {}
+    final_cp: Checkpoint | None = None
+    for cp in checkpoints:
+        if cp.stage_id is None:
+            final_cp = cp
+        else:
+            cp_by_stage[str(cp.stage_id)] = cp
+
+    # All checkpoint responses for this execution, indexed by checkpoint_id
+    result = await db.execute(
+        select(CheckpointResponse).where(CheckpointResponse.execution_id == execution_id)
+    )
+    cp_responses = {str(r.checkpoint_id): r for r in result.scalars().all()}
+
+    # All stage_output messages, indexed by stage_id
+    result = await db.execute(
+        select(Message).where(
+            Message.execution_id == execution_id,
+            Message.sender_type == "agent",
+            Message.message_type == "stage_output",
+        )
+    )
+    outputs_by_stage: dict[str, Message] = {
+        str(m.stage_id): m for m in result.scalars().all() if m.stage_id
+    }
+
+    # Build per-stage summaries
+    stage_summaries: list[StageSummary] = []
+    for stage in stages:
+        sid = str(stage.id)
+        cp = cp_by_stage.get(sid)
+        cp_resp = cp_responses.get(str(cp.id)) if cp else None
+        cp_row = CheckpointResponseRow(decision=cp_resp.decision, comment=cp_resp.comment) if cp_resp else None
+        stage_summaries.append(
+            StageSummary.build(
+                stage=stage,
+                output_msg=outputs_by_stage.get(sid),
+                cp_response=cp_row,
+                cp_type=cp.type if cp else None,
+            )
+        )
+
+    # Final review
+    final_resp = cp_responses.get(str(final_cp.id)) if final_cp else None
+
+    return ExecutionSummaryOut(
+        execution_id=str(execution.id),
+        execution_number=execution.execution_number,
+        status=execution.status,
+        started_at=execution.started_at,
+        completed_at=execution.completed_at,
+        error=execution.error,
+        work_item_objective=work_item.objective,
+        work_item_description=work_item.description,
+        work_item_expected_outcome=work_item.expected_outcome,
+        stages=stage_summaries,
+        final_review_decision=final_resp.decision if final_resp else None,
+        final_review_comment=final_resp.comment if final_resp else None,
+    )
 
 
 @router.get("/work-items/{work_item_id}/executions", response_model=list[ExecutionOut])
@@ -338,6 +430,7 @@ async def respond_to_checkpoint(
         execution.error = error_msg
         execution.completed_at = now
         execution.blocking_checkpoint_id = None
+        execution.pending_summary = None
         execution.updated_at = now
         db.add(ExecutionEvent(
             id=uuid.uuid4(),
@@ -357,6 +450,7 @@ async def respond_to_checkpoint(
         execution.status = "completed"
         execution.completed_at = now
         execution.blocking_checkpoint_id = None
+        execution.pending_summary = None
         execution.updated_at = now
         work_item.status = "completed"
         work_item.updated_at = now
@@ -399,6 +493,7 @@ async def respond_to_checkpoint(
 
         execution.status = "running"
         execution.blocking_checkpoint_id = None
+        execution.pending_summary = None
         execution.updated_at = now
         db.add(ExecutionEvent(
             id=uuid.uuid4(),

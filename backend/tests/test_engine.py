@@ -439,3 +439,78 @@ async def test_engine_consumes_pending_guidance(engine_setup, test_db_url: str):
         consumed_at = result.scalar_one()
 
     assert consumed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_engine_collects_summary_before_checkpoint(engine_setup, test_db_url: str):
+    """Engine calls run_stage a second time with a summary prompt, stores pending_summary."""
+    exc_id = engine_setup["execution_id"]
+
+    call_count = 0
+    call_prompts: list[str] = []
+
+    async def _tracking_mock(agent_def, task_text, tool_names, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        call_prompts.append(task_text)
+        yield {"event_type": "stage.stream_end", "payload": {"final_text": f"result_{call_count}", "total_tokens": {}}}
+
+    with patch("app.executions.engine.run_stage", side_effect=_tracking_mock):
+        await ExecutionEngine(_make_factory(test_db_url)).run_execution(exc_id)
+
+    # run_stage must be called twice: once for stage work, once for summary
+    assert call_count == 2
+    # Second call must contain "Summarize" to distinguish it from the stage task
+    assert "Summarize" in call_prompts[1]
+
+    async with _test_db(test_db_url) as db:
+        result = await db.execute(
+            text("SELECT pending_summary FROM executions WHERE id = :eid"),
+            {"eid": exc_id},
+        )
+        pending_summary = result.scalar_one()
+
+        result2 = await db.execute(
+            text("SELECT event_type FROM execution_events WHERE execution_id = :eid AND event_type = 'agent.summary'"),
+            {"eid": exc_id},
+        )
+        summary_events = result2.all()
+
+    assert pending_summary == "result_2"
+    assert len(summary_events) == 1
+
+
+@pytest.mark.asyncio
+async def test_engine_summary_error_does_not_block_checkpoint(engine_setup, test_db_url: str):
+    """If the summary call raises StageError, the checkpoint is still triggered."""
+    from app.runtime import StageError
+
+    exc_id = engine_setup["execution_id"]
+    call_count = 0
+
+    async def _summary_fails_mock(agent_def, task_text, tool_names, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:
+            raise StageError("summary failed")
+        yield {"event_type": "stage.stream_end", "payload": {"final_text": "stage done", "total_tokens": {}}}
+
+    with patch("app.executions.engine.run_stage", side_effect=_summary_fails_mock):
+        await ExecutionEngine(_make_factory(test_db_url)).run_execution(exc_id)
+
+    async with _test_db(test_db_url) as db:
+        result = await db.execute(
+            text("SELECT status, pending_summary FROM executions WHERE id = :eid"),
+            {"eid": exc_id},
+        )
+        row = result.one()
+
+        result2 = await db.execute(
+            text("SELECT event_type FROM execution_events WHERE execution_id = :eid AND event_type = 'checkpoint.triggered'"),
+            {"eid": exc_id},
+        )
+        checkpoint_events = result2.all()
+
+    assert row.status == "waiting_for_approval"
+    assert row.pending_summary is None
+    assert len(checkpoint_events) == 1

@@ -10,7 +10,9 @@ import type {
   CheckpointBrief,
   EventOut,
   ExecutionOut,
+  ExecutionSummaryOut,
   PolicyOut,
+  StageSummary,
   WorkItem,
 } from "@/lib/types"
 
@@ -87,6 +89,10 @@ function describeEvent(ev: EventOut): string {
       return "Execution resumed"
     case "execution.completed":
       return "Execution completed"
+    case "agent.summary": {
+      const s = String(p.summary ?? "")
+      return `Summary: ${s.length > 120 ? s.slice(0, 120) + "…" : s}`
+    }
     case "execution.failed":
       return `Failed: ${p.error}`
     default:
@@ -217,6 +223,181 @@ function CheckpointActions({
   )
 }
 
+// ─── Summary View ─────────────────────────────────────────────────────────────
+
+function DecisionBadge({ decision }: { decision: string }) {
+  const approved = decision === "approve"
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+      approved
+        ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+        : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+    }`}>
+      {approved ? "Approved" : "Rejected"}
+    </span>
+  )
+}
+
+function StageSummaryCard({ stage }: { stage: StageSummary }) {
+  return (
+    <div className="rounded-lg border border-border overflow-hidden">
+      {/* Stage header */}
+      <div className="flex items-center gap-3 bg-muted/40 px-5 py-3 border-b border-border">
+        <span className="text-xs font-medium text-muted-foreground">STAGE {stage.sequence}</span>
+        <span className="text-sm font-semibold">{stage.name}</span>
+        {stage.checkpoint_decision && (
+          <span className="ml-auto"><DecisionBadge decision={stage.checkpoint_decision} /></span>
+        )}
+      </div>
+
+      <div className="divide-y divide-border">
+        {/* Task */}
+        <div className="px-5 py-4">
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Task Description</p>
+          <p className="text-sm whitespace-pre-wrap text-foreground">{stage.description}</p>
+        </div>
+
+        {/* Expected output */}
+        <div className="px-5 py-4">
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Expected Output</p>
+          <p className="text-sm whitespace-pre-wrap text-muted-foreground">{stage.expected_output}</p>
+        </div>
+
+        {/* Agent output */}
+        <div className="px-5 py-4">
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Agent Output</p>
+          {stage.agent_output ? (
+            <p className="text-sm whitespace-pre-wrap text-foreground">{stage.agent_output}</p>
+          ) : (
+            <p className="text-sm italic text-muted-foreground">No output recorded.</p>
+          )}
+        </div>
+
+        {/* Checkpoint review */}
+        {stage.checkpoint_type && (
+          <div className="px-5 py-4 bg-muted/20">
+            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Checkpoint — {stage.checkpoint_type.replace(/_/g, " ")}
+            </p>
+            {stage.checkpoint_decision ? (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <DecisionBadge decision={stage.checkpoint_decision} />
+                </div>
+                {stage.checkpoint_comment && (
+                  <p className="text-sm text-foreground mt-2 whitespace-pre-wrap">{stage.checkpoint_comment}</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm italic text-muted-foreground">No response recorded.</p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SummaryView({ summary, status }: { summary: ExecutionSummaryOut; status: string }) {
+  const fmt = (iso: string | null) => iso ? new Date(iso).toLocaleString() : "—"
+  const duration = summary.started_at && summary.completed_at
+    ? Math.round((new Date(summary.completed_at).getTime() - new Date(summary.started_at).getTime()) / 1000)
+    : null
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <div className="mx-auto max-w-3xl px-6 py-8 space-y-8">
+
+        {/* Overview card */}
+        <div className="rounded-lg border border-border overflow-hidden">
+          <div className="bg-muted/40 px-5 py-3 border-b border-border">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Execution Overview</p>
+          </div>
+          <div className="divide-y divide-border">
+            <div className="px-5 py-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <p className="text-xs text-muted-foreground mb-0.5">Status</p>
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                  status === "completed"
+                    ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                    : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                }`}>{status}</span>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-0.5">Started</p>
+                <p className="text-sm">{fmt(summary.started_at)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-0.5">Completed</p>
+                <p className="text-sm">{fmt(summary.completed_at)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-0.5">Duration</p>
+                <p className="text-sm">{duration !== null ? `${duration}s` : "—"}</p>
+              </div>
+            </div>
+
+            {summary.error && (
+              <div className="px-5 py-4 bg-destructive/5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-destructive mb-1">Error</p>
+                <p className="text-sm text-destructive">{summary.error}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Work item */}
+        <div className="rounded-lg border border-border overflow-hidden">
+          <div className="bg-muted/40 px-5 py-3 border-b border-border">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Work Item</p>
+          </div>
+          <div className="divide-y divide-border">
+            <div className="px-5 py-4">
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Objective</p>
+              <p className="text-sm text-foreground">{summary.work_item_objective}</p>
+            </div>
+            <div className="px-5 py-4">
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Description</p>
+              <p className="text-sm whitespace-pre-wrap text-foreground">{summary.work_item_description}</p>
+            </div>
+            <div className="px-5 py-4">
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Expected Outcome</p>
+              <p className="text-sm whitespace-pre-wrap text-foreground">{summary.work_item_expected_outcome}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Stages */}
+        <div>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Stages ({summary.stages.length})
+          </p>
+          <div className="space-y-4">
+            {summary.stages.map((s) => (
+              <StageSummaryCard key={s.sequence} stage={s} />
+            ))}
+          </div>
+        </div>
+
+        {/* Final review */}
+        {(summary.final_review_decision || summary.final_review_comment) && (
+          <div className="rounded-lg border border-border overflow-hidden">
+            <div className="bg-muted/40 px-5 py-3 border-b border-border flex items-center gap-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Final Review</p>
+              {summary.final_review_decision && <DecisionBadge decision={summary.final_review_decision} />}
+            </div>
+            {summary.final_review_comment && (
+              <div className="px-5 py-4">
+                <p className="text-sm whitespace-pre-wrap text-foreground">{summary.final_review_comment}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ExecutionWorkspacePage({
@@ -233,6 +414,9 @@ export default function ExecutionWorkspacePage({
   const [events, setEvents] = useState<EventOut[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [activeTab, setActiveTab] = useState<"timeline" | "summary">("timeline")
+  const [summary, setSummary] = useState<ExecutionSummaryOut | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
 
   const lastEventIdRef = useRef<string | null>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
@@ -364,6 +548,19 @@ export default function ExecutionWorkspacePage({
 
   // ── Checkpoint response handler ───────────────────────────────────────────
 
+  async function loadSummary() {
+    if (summaryLoading || summary) return
+    setSummaryLoading(true)
+    try {
+      const s = await apiFetch<ExecutionSummaryOut>(`/executions/${executionId}/summary`)
+      setSummary(s)
+    } catch {
+      // summary is best-effort; timeline remains available
+    } finally {
+      setSummaryLoading(false)
+    }
+  }
+
   function handleCheckpointResponse(nextAction: string, newStatus: string) {
     setExecution((prev) => prev ? { ...prev, status: newStatus, blocking_checkpoint: null } : prev)
     // Event poll will pick up the new events on next tick
@@ -419,16 +616,50 @@ export default function ExecutionWorkspacePage({
           </span>
           <StatusBadge status={execution.status} />
         </div>
-        {!TERMINAL.has(execution.status) && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            Live
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {TERMINAL.has(execution.status) && (
+            <div className="flex items-center rounded-md border border-border text-xs overflow-hidden">
+              <button
+                className={`px-3 py-1.5 transition-colors ${activeTab === "timeline" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setActiveTab("timeline")}
+              >
+                Timeline
+              </button>
+              <button
+                className={`px-3 py-1.5 transition-colors ${activeTab === "summary" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => { setActiveTab("summary"); loadSummary() }}
+              >
+                Summary
+              </button>
+            </div>
+          )}
+          {!TERMINAL.has(execution.status) && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Live
+            </div>
+          )}
+        </div>
       </div>
 
+      {/* Summary view */}
+      {activeTab === "summary" && TERMINAL.has(execution.status) && (
+        summaryLoading ? (
+          <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading summary…
+          </div>
+        ) : summary ? (
+          <SummaryView summary={summary} status={execution.status} />
+        ) : (
+          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+            Summary unavailable.
+          </div>
+        )
+      )}
+
       {/* Three-column workspace */}
-      <div className="grid flex-1 overflow-hidden lg:grid-cols-[280px_1fr_300px]">
+      <div className={`grid flex-1 overflow-hidden lg:grid-cols-[280px_1fr_300px] ${activeTab === "summary" ? "hidden" : ""}`}>
 
         {/* LEFT — Stage info */}
         <div className="flex flex-col gap-4 border-r border-border overflow-y-auto px-4 py-5">
@@ -530,6 +761,18 @@ export default function ExecutionWorkspacePage({
                 <p className="text-xs font-mono text-foreground mt-0.5 break-all">
                   {cp.assigned_user_id}
                 </p>
+              </div>
+
+              {/* Agent summary */}
+              <div className="rounded-md bg-gray-100 dark:bg-gray-800/50 px-3 py-2.5">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Agent Summary
+                </p>
+                {execution.pending_summary ? (
+                  <p className="text-sm whitespace-pre-wrap">{execution.pending_summary}</p>
+                ) : (
+                  <p className="text-sm italic text-muted-foreground">Summary pending…</p>
+                )}
               </div>
 
               {isAssignee ? (

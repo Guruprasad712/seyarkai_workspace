@@ -3,8 +3,8 @@
 Update at the end of every session. Every Claude Code session starts by reading this file,
 CLAUDE.md, and the relevant docs/ sections.
 
-## Current: Day 5 of 10 — Execution engine
-Date: 2026-10-08   Region: us-central1
+## Current: Day 6 of 10 — Guidance messages + knowledge retrieval
+Date: 2026-10-11   Region: us-central1
 
 ### Done (Days 1–4)
 - [x] Public repo, .gitignore, secret scanning + push protection
@@ -38,13 +38,19 @@ Date: 2026-10-08   Region: us-central1
 - [x] D4: Policy editor UI — /policies/[policyId] three-panel layout (agents left, workflow center, checkpoints right); add/edit/delete/reorder stages; per-stage and final_review checkpoints; publish with inline failure display; auto-nav from work item after generate; read-only published state; new types: StageOut, CheckpointOut, PolicyOut in lib/types.ts
 - [x] D4: Fix login redirect — replaced router.replace("/") with window.location.href="/" so cookie is flushed before proxy.ts middleware evaluates the next request
 
-### Done (Day 5, so far)
+### Done (Day 5)
 - [x] D5: Execution engine (Phase 1) — POST /work-items/{id}/executions (202, no-policy 422, active-exists 409, new→in_progress transition), GET /executions/{id} with blocking_checkpoint resolved, GET /work-items/{id}/executions ordered by execution_number; 8 offline tests; all 114 offline tests passing
 - [x] D5: Execution engine (Phase 2) — ExecutionEngine class (background task, stage loop, event persistence, checkpoint pause, failure handling); ExecutionEvent + Message ORM models; GET /executions/{id}/stream SSE endpoint; engine wired to background task on create; 8 new offline engine tests (122 total)
 - [x] D5: Checkpoint response endpoint — POST /executions/{id}/checkpoints/{cid}/respond; permission check (assignee or super_admin); decision×type validation; reject/approve-final/approve-stage/input_provided branches; CheckpointResponse ORM model; engine resumes from next stage sequence; 8 tests; all 130 offline tests passing
+- [x] D5: GET /executions/{id}/events — REST event listing with cursor pagination (after, limit); EventOut schema; 8 offline tests; 138 offline tests passing
+- [x] D5: Frontend execution status panel — Execute button on work-item detail page; 3 s status poll; stage name resolution; blocking checkpoint display; ExecutionOut + CheckpointBrief types
+- [x] D5: Frontend Execution Workspace — /executions/[executionId] three-panel page; left: current stage info; center: live event timeline (2 s poll, cursor-based); right: checkpoint panel with type-specific action buttons (approval/review/final_review/input), permission-gated to assignee or super_admin; EventOut type
+- [x] D5: Agent summary before checkpoint — pending_summary field on Execution (migration 0003); _call_summary_stage() helper; agent.summary event emitted; pending_summary shown in checkpoint panel; cleared on resume/reject
+- [x] D5: Execution summary page — GET /executions/{id}/summary; ExecutionSummaryOut (per-stage agent output + checkpoint decisions + final review); Summary tab in workspace top bar (terminal executions only); SummaryView component with overview, work item, stages, final review sections
+- [x] D5: Work-item detail polish — entire execution panel box clickable; policy section between Workers and Execution (published policy with stage pills + checkpoint count, links to policy editor); human-readable no_published_policy execute error; 140 offline tests passing
 
 ### Next
-Day 5 (Phase 2) — Execution engine continued (SSE event stream, ADK stage runner integration, checkpoint responses, guidance messages; frontend: execution status page, stage events, checkpoint approvals).
+Day 6 — Guidance messages endpoint (POST /executions/{id}/messages); knowledge retrieval integration (Company Brain injection into stage task); POST /executions/{id}/ask (P1).
 
 ### Decision log
 - LLM access is Vertex AI via ADC; AI Studio prepay was unfunded so `GOOGLE_GENAI_USE_VERTEXAI=1` is the only working path.
