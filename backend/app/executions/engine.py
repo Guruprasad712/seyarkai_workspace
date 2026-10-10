@@ -58,10 +58,10 @@ class ExecutionEngine:
         from app.core.db import AsyncSessionLocal
         return AsyncSessionLocal
 
-    async def run_execution(self, execution_id: str) -> None:
+    async def run_execution(self, execution_id: str, start_from_stage_sequence: int = 1) -> None:
         async with self._get_session_factory()() as db:
             try:
-                await self._run(db, execution_id)
+                await self._run(db, execution_id, start_from_stage_sequence)
             except Exception:
                 # Outer safety net — _run handles its own exceptions; this catches
                 # anything that escapes (e.g. session-open failures).
@@ -70,7 +70,7 @@ class ExecutionEngine:
                     file=sys.stderr,
                 )
 
-    async def _run(self, db: AsyncSession, execution_id: str) -> None:
+    async def _run(self, db: AsyncSession, execution_id: str, start_from_stage_sequence: int = 1) -> None:
         # ------------------------------------------------------------------
         # 1. Load execution
         # ------------------------------------------------------------------
@@ -136,6 +136,8 @@ class ExecutionEngine:
             # 4. Stage loop
             # --------------------------------------------------------------
             for stage in stages:
+                if stage.sequence < start_from_stage_sequence:
+                    continue
                 sid = str(stage.id)
                 now = _now()
                 execution.current_stage_id = stage.id

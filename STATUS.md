@@ -41,6 +41,7 @@ Date: 2026-10-08   Region: us-central1
 ### Done (Day 5, so far)
 - [x] D5: Execution engine (Phase 1) — POST /work-items/{id}/executions (202, no-policy 422, active-exists 409, new→in_progress transition), GET /executions/{id} with blocking_checkpoint resolved, GET /work-items/{id}/executions ordered by execution_number; 8 offline tests; all 114 offline tests passing
 - [x] D5: Execution engine (Phase 2) — ExecutionEngine class (background task, stage loop, event persistence, checkpoint pause, failure handling); ExecutionEvent + Message ORM models; GET /executions/{id}/stream SSE endpoint; engine wired to background task on create; 8 new offline engine tests (122 total)
+- [x] D5: Checkpoint response endpoint — POST /executions/{id}/checkpoints/{cid}/respond; permission check (assignee or super_admin); decision×type validation; reject/approve-final/approve-stage/input_provided branches; CheckpointResponse ORM model; engine resumes from next stage sequence; 8 tests; all 130 offline tests passing
 
 ### Next
 Day 5 (Phase 2) — Execution engine continued (SSE event stream, ADK stage runner integration, checkpoint responses, guidance messages; frontend: execution status page, stage events, checkpoint approvals).

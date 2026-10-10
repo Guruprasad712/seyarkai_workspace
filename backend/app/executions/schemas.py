@@ -62,3 +62,15 @@ class ExecutionOut(BaseModel):
             error=obj.error,
             created_at=obj.created_at,
         )
+
+
+class CheckpointResponseIn(BaseModel):
+    decision: str
+    comment: str | None = None
+    input_text: str | None = None
+
+
+class CheckpointResponseOut(BaseModel):
+    execution_id: str
+    status: str
+    next_action: str
