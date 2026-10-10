@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from app.executions.models import Execution
+from app.executions.models import Execution, ExecutionEvent
 from app.policies.models import Checkpoint
 
 
@@ -60,6 +60,30 @@ class ExecutionOut(BaseModel):
             started_at=obj.started_at,
             completed_at=obj.completed_at,
             error=obj.error,
+            created_at=obj.created_at,
+        )
+
+
+class EventOut(BaseModel):
+    id: str
+    execution_id: str
+    stage_id: str | None
+    event_type: str
+    actor_type: str
+    actor_id: str | None
+    payload: dict
+    created_at: datetime
+
+    @classmethod
+    def from_orm(cls, obj: ExecutionEvent) -> "EventOut":
+        return cls(
+            id=str(obj.id),
+            execution_id=str(obj.execution_id),
+            stage_id=str(obj.stage_id) if obj.stage_id else None,
+            event_type=obj.event_type,
+            actor_type=obj.actor_type,
+            actor_id=str(obj.actor_id) if obj.actor_id else None,
+            payload=obj.payload,
             created_at=obj.created_at,
         )
 

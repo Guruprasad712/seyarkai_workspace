@@ -18,6 +18,7 @@ from app.executions.schemas import (
     CheckpointResponseIn,
     CheckpointResponseOut,
     CreateExecutionResponse,
+    EventOut,
     ExecutionOut,
 )
 from app.policies.models import Checkpoint, Policy, PolicyStage
@@ -189,6 +190,41 @@ async def stream_execution_events(
             yield {"event": "stream.end", "data": json.dumps({"status": execution.status})}
 
     return EventSourceResponse(_generate())
+
+
+_MAX_EVENTS_LIMIT = 200
+
+
+@router.get("/executions/{execution_id}/events", response_model=list[EventOut])
+async def list_execution_events(
+    execution_id: str,
+    after: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=_MAX_EVENTS_LIMIT),
+    _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Execution).where(Execution.id == execution_id))
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="execution not found")
+
+    query = (
+        select(ExecutionEvent)
+        .where(ExecutionEvent.execution_id == execution_id)
+        .order_by(ExecutionEvent.created_at)
+    )
+
+    if after is not None:
+        result = await db.execute(
+            select(ExecutionEvent).where(ExecutionEvent.id == after)
+        )
+        anchor = result.scalar_one_or_none()
+        if anchor is not None:
+            query = query.where(ExecutionEvent.created_at > anchor.created_at)
+
+    query = query.limit(limit)
+    result = await db.execute(query)
+    events = list(result.scalars().all())
+    return [EventOut.from_orm(ev) for ev in events]
 
 
 # Valid decisions per checkpoint type
