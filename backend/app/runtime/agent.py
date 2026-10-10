@@ -22,6 +22,7 @@ _BACKEND_DIR = Path(__file__).resolve().parents[2]  # runtime/ → app/ → back
 # Map server_key → module path launched as subprocess
 _SERVER_MODULES: dict[str, str] = {
     "knowledge": "app.mcp_servers.knowledge",
+    "docs": "app.mcp_servers.docs",
 }
 
 _ENV_PUSHED = False

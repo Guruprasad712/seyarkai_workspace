@@ -160,6 +160,15 @@ export type CheckpointBrief = {
   stage_id: string | null
 }
 
+export type ArtifactOut = {
+  id: string
+  name: string
+  type: string
+  url: string
+  stage_id: string
+  created_at: string
+}
+
 export type ExecutionOut = {
   id: string
   work_item_id: string
@@ -173,4 +182,19 @@ export type ExecutionOut = {
   error: string | null
   pending_summary: string | null
   created_at: string
+  artifacts: ArtifactOut[]
+}
+
+export type KnowledgeDocument = {
+  id: string
+  title: string
+  content: string
+  source: string
+  last_verified_at: string
+  verified_by: string | null
+  external_id: string | null
+  age_days: number
+  freshness: "fresh" | "ageing" | "stale"
+  created_at: string
+  updated_at: string
 }

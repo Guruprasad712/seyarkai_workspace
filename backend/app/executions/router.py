@@ -9,12 +9,17 @@ from sse_starlette.sse import EventSourceResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.models import AgentVersion
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
+from app.core.config import settings
 from app.core.db import get_db
 from app.executions.engine import ExecutionEngine
-from app.executions.models import Execution, ExecutionEvent, CheckpointResponse, Message
+from app.executions.models import Artifact, Execution, ExecutionEvent, CheckpointResponse, Message
+from app.runtime import StageError, run_stage
 from app.executions.schemas import (
+    AskIn,
+    AskOut,
     CheckpointResponseIn,
     CheckpointResponseOut,
     CheckpointResponseRow,
@@ -22,6 +27,8 @@ from app.executions.schemas import (
     EventOut,
     ExecutionOut,
     ExecutionSummaryOut,
+    GuidanceMessageIn,
+    GuidanceMessageOut,
     StageSummary,
 )
 from app.policies.models import Checkpoint, Policy, PolicyStage
@@ -131,7 +138,14 @@ async def get_execution(
         )
         blocking_checkpoint = result.scalar_one_or_none()
 
-    return ExecutionOut.from_orm(execution, blocking_checkpoint)
+    result = await db.execute(
+        select(Artifact)
+        .where(Artifact.execution_id == execution_id)
+        .order_by(Artifact.created_at)
+    )
+    artifacts = list(result.scalars().all())
+
+    return ExecutionOut.from_orm(execution, blocking_checkpoint, artifacts)
 
 
 @router.get("/executions/{execution_id}/summary", response_model=ExecutionSummaryOut)
@@ -517,4 +531,239 @@ async def respond_to_checkpoint(
         execution_id=execution_id,
         status=execution.status,
         next_action=next_action,
+    )
+
+
+@router.post(
+    "/executions/{execution_id}/messages",
+    response_model=GuidanceMessageOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def send_guidance_message(
+    execution_id: str,
+    body: GuidanceMessageIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Execution).where(Execution.id == execution_id))
+    execution = result.scalar_one_or_none()
+    if execution is None:
+        raise HTTPException(status_code=404, detail="execution not found")
+
+    if execution.status in _TERMINAL_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "execution_terminal",
+                "message": f"cannot send guidance to a {execution.status} execution",
+            },
+        )
+
+    if not body.content.strip():
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "content_empty", "message": "content must not be blank"},
+        )
+
+    now = datetime.now(timezone.utc)
+    msg = Message(
+        id=uuid.uuid4(),
+        execution_id=execution_id,
+        stage_id=execution.current_stage_id,
+        sender_type="human",
+        sender_id=current_user.id,
+        message_type="guidance",
+        content=body.content.strip(),
+        consumed_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(msg)
+
+    db.add(ExecutionEvent(
+        id=uuid.uuid4(),
+        execution_id=execution_id,
+        stage_id=str(execution.current_stage_id) if execution.current_stage_id else None,
+        event_type="human.message",
+        actor_type="human",
+        actor_id=current_user.id,
+        payload={"message_id": str(msg.id), "preview": body.content.strip()[:200]},
+        created_at=now,
+    ))
+
+    await db.commit()
+    return GuidanceMessageOut.from_orm(msg)
+
+
+@router.post("/executions/{execution_id}/ask", response_model=AskOut)
+async def ask_executor(
+    execution_id: str,
+    body: AskIn,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Answer-only LLM call using the most recent stage agent's context.
+
+    Never changes execution state. Stores Q and A; emits executor.response.
+    """
+    result = await db.execute(select(Execution).where(Execution.id == execution_id))
+    execution = result.scalar_one_or_none()
+    if execution is None:
+        raise HTTPException(status_code=404, detail="execution not found")
+
+    if not body.question.strip():
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "question_empty", "message": "question must not be blank"},
+        )
+
+    # Resolve the most recent stage agent: current_stage_id if set, else latest
+    # completed stage output message's stage_id.
+    agent_version: AgentVersion | None = None
+    stage_id_for_context: str | None = None
+
+    if execution.current_stage_id is not None:
+        result = await db.execute(
+            select(PolicyStage).where(PolicyStage.id == execution.current_stage_id)
+        )
+        stage = result.scalar_one_or_none()
+        if stage is not None:
+            result = await db.execute(
+                select(AgentVersion).where(AgentVersion.id == stage.agent_version_id)
+            )
+            agent_version = result.scalar_one_or_none()
+            stage_id_for_context = str(execution.current_stage_id)
+
+    if agent_version is None:
+        # Fall back to latest stage output message's stage
+        result = await db.execute(
+            select(Message)
+            .where(
+                Message.execution_id == execution_id,
+                Message.sender_type == "agent",
+                Message.message_type == "stage_output",
+            )
+            .order_by(Message.created_at.desc())
+            .limit(1)
+        )
+        last_output = result.scalar_one_or_none()
+        if last_output is not None and last_output.stage_id is not None:
+            result = await db.execute(
+                select(PolicyStage).where(PolicyStage.id == last_output.stage_id)
+            )
+            stage = result.scalar_one_or_none()
+            if stage is not None:
+                result = await db.execute(
+                    select(AgentVersion).where(AgentVersion.id == stage.agent_version_id)
+                )
+                agent_version = result.scalar_one_or_none()
+                stage_id_for_context = str(last_output.stage_id)
+
+    if agent_version is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "no_stage_context",
+                "message": "no stage has run yet; cannot answer questions before the execution starts",
+            },
+        )
+
+    # Collect previous stage outputs as conversation context (most recent first, truncated)
+    result = await db.execute(
+        select(Message)
+        .where(
+            Message.execution_id == execution_id,
+            Message.sender_type == "agent",
+            Message.message_type == "stage_output",
+        )
+        .order_by(Message.created_at)
+    )
+    stage_outputs = list(result.scalars().all())
+
+    context_parts: list[str] = []
+    if stage_outputs:
+        context_parts.append("Previous stage outputs in this execution:")
+        for msg in stage_outputs:
+            context_parts.append(f"\n---\n{msg.content[:2000]}")
+
+    context_parts.append(f"\nQuestion from reviewer: {body.question.strip()}")
+    ask_text = "\n".join(context_parts)
+
+    agent_definition = {
+        "name": agent_version.instructions[:60].replace(" ", "_"),
+        "instructions": agent_version.instructions,
+        "capabilities": agent_version.capabilities or [],
+    }
+
+    # Single LLM call — no tools, answer only
+    answer: str | None = None
+    try:
+        async for event in run_stage(
+            agent_definition,
+            ask_text,
+            tool_names=[],
+            max_llm_calls=1,
+            timeout_seconds=settings.STAGE_TIMEOUT_SECONDS,
+        ):
+            if event["event_type"] == "stage.stream_end":
+                answer = event["payload"].get("final_text") or None
+                break
+    except StageError as exc:
+        raise HTTPException(status_code=502, detail={"error": "model_error", "message": str(exc)})
+
+    if not answer:
+        raise HTTPException(status_code=502, detail={"error": "model_error", "message": "model returned no answer"})
+
+    now = datetime.now(timezone.utc)
+
+    # Persist question
+    q_msg = Message(
+        id=uuid.uuid4(),
+        execution_id=execution_id,
+        stage_id=stage_id_for_context,
+        sender_type="human",
+        sender_id=current_user.id,
+        message_type="question",
+        content=body.question.strip(),
+        consumed_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(q_msg)
+    await db.flush()
+
+    # Persist answer
+    a_msg = Message(
+        id=uuid.uuid4(),
+        execution_id=execution_id,
+        stage_id=stage_id_for_context,
+        sender_type="agent",
+        sender_id=None,
+        message_type="answer",
+        content=answer,
+        consumed_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(a_msg)
+    await db.flush()
+
+    # Emit executor.response event
+    db.add(ExecutionEvent(
+        id=uuid.uuid4(),
+        execution_id=execution_id,
+        stage_id=stage_id_for_context,
+        event_type="executor.response",
+        actor_type="agent",
+        actor_id=None,
+        payload={"message_id": str(a_msg.id), "preview": answer[:200]},
+        created_at=now,
+    ))
+
+    await db.commit()
+
+    return AskOut(
+        question_message_id=str(q_msg.id),
+        answer_message_id=str(a_msg.id),
+        answer=answer,
     )

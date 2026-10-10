@@ -49,8 +49,28 @@ Date: 2026-10-11   Region: us-central1
 - [x] D5: Execution summary page — GET /executions/{id}/summary; ExecutionSummaryOut (per-stage agent output + checkpoint decisions + final review); Summary tab in workspace top bar (terminal executions only); SummaryView component with overview, work item, stages, final review sections
 - [x] D5: Work-item detail polish — entire execution panel box clickable; policy section between Workers and Execution (published policy with stage pills + checkpoint count, links to policy editor); human-readable no_published_policy execute error; 140 offline tests passing
 
+### Done (Day 6)
+- [x] D6: Knowledge module — KnowledgeDocument ORM (table existed in 0001), `compute_freshness()`, `build_injection_block()`, `VertexSearchRetriever` (asyncio.to_thread, offline-safe when data_store_id empty), `GET /knowledge`, `POST /knowledge` (best-effort Vertex index), `POST /knowledge/{id}/verify` (DB-only); google-cloud-discoveryengine==0.20.5 pinned; 25 knowledge tests
+- [x] D6: Knowledge injection into engine — `retriever` injectable on ExecutionEngine; knowledge block appended to stage task_text; `knowledge.retrieved` event emitted on hits; 3 engine injection tests
+- [x] D6: MCP knowledge server wired to VertexSearchRetriever (falls back to FakeRetriever offline)
+- [x] D6: Guidance messages — `POST /executions/{id}/messages`; stores Message (sender_type=human, message_type=guidance); emits `human.message` event; rejected on terminal executions; 5 tests; all 167 offline tests passing
+- [x] D6: Frontend /knowledge page — freshness badges (fresh/ageing/stale), summary stat chips, add document form, per-row Verify button; KnowledgeDocument type added to lib/types.ts
+- [x] D6: Frontend guidance input panel — GuidanceInput component in right column of execution workspace (non-terminal executions only); `human.message` and `knowledge.retrieved` event descriptions in timeline
+- [x] D6: Demo corpus + seed script — `scripts/demo_corpus.json` (8 procurement policy docs, mixed freshness), `scripts/seed_knowledge.py` (argparse, HTTP idempotent POST, Vertex verification); 8 documents seeded and searchable in Vertex AI Search
+- [x] D6: `GET /knowledge/search?q=` endpoint — VertexSearchRetriever exposed via HTTP; KnowledgeHitOut schema; offline-safe (returns [] when VERTEX_SEARCH_DATA_STORE_ID unset); fixed Vertex UUID normalisation (Vertex strips hyphens; retriever now canonicalises before DB lookup); 28 knowledge tests passing
+- [x] D6: Fix `_index_document` for CONTENT_REQUIRED data store — added `document.content` (`raw_bytes=full_text.encode(), mime_type=text/plain`); confirmed with direct SDK test; payment terms query now returns Supplier Payment Terms Policy (stale, 212d) ranked first
+
+### Done (Day 7)
+- [x] D7: `generate_document` Docs MCP server — `app/mcp_servers/docs/server.py`; keyless impersonation of `DOCS_SERVICE_ACCOUNT_EMAIL`; Markdown→Docs batchUpdate requests (headings, lists, bold/italic, code); Drive share with `DOCS_SHARE_WITH`; HTML fallback (local `artifacts/` dir, `GET /artifacts/{filename}` endpoint, no auth required); `Artifact` ORM model added to `executions/models.py`; `"docs"` added to `_SERVER_MODULES` in `agent.py`; `google-api-python-client==2.201.0` + `google-auth-httplib2==0.4.4` added; 9 tests (8 offline + 1 integration subprocess)
+- [x] D7: `structured_result` in normalise.py — FastMCP dict-return tools attach raw dict as `structured_result` key in in-memory event payload; stripped before DB persist
+- [x] D7: Artifact detection in engine — `tool.result` events for `generate_document` write `artifacts` row (`type = "html" | "google_doc"` by doc_id prefix); emit `artifact.created` event with `{artifact_id, name, url}`; 2 new engine tests
+- [x] D7: `POST /executions/{id}/ask` — answer-only LLM call (max_llm_calls=1, no tools); context from previous stage outputs + question; stores question (human) and answer (agent) Message rows; emits `executor.response` event; 8 offline tests; all 175 offline tests passing
+- [x] D7: `ArtifactOut` schema + `GET /executions/{id}` artifacts — `artifacts: list[ArtifactOut]` added to `ExecutionOut`; loaded ordered by created_at; 1 new test
+- [x] D7: Frontend Artifacts tab — always-visible tab toggle (Timeline / Artifacts / Summary); `ArtifactsPanel` lists documents with type badge (Google Doc / HTML), timestamp, "Open Document ↗" link; empty state shown when none
+- [x] D7: Frontend `knowledge.retrieved` expandable row — click to expand sub-list of retrieved docs; fresh=muted, ageing=orange, stale=red + age badge; replaces flat one-liner; `artifact.created` and `executor.response` descriptions added to `describeEvent`
+
 ### Next
-Day 6 — Guidance messages endpoint (POST /executions/{id}/messages); knowledge retrieval integration (Company Brain injection into stage task); POST /executions/{id}/ask (P1).
+Day 8 — Cloud Run deploy: Cloud SQL migration, Secret Manager wiring, `deploy/` scripts, CI docker build→push→deploy; smoke test live endpoints.
 
 ### Decision log
 - LLM access is Vertex AI via ADC; AI Studio prepay was unfunded so `GOOGLE_GENAI_USE_VERTEXAI=1` is the only working path.

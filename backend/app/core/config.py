@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     # Docs MCP server
     DOCS_SERVICE_ACCOUNT_EMAIL: str = ""
     DOCS_SHARE_WITH: str = ""
+    API_BASE_URL: str = "http://localhost:8000"
 
     # Execution engine
     STAGE_TIMEOUT_SECONDS: float = 300.0

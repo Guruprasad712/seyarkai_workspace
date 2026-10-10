@@ -235,6 +235,10 @@ async def work_item_with_policy(test_db_url: str, auth_headers, published_agent_
     }
 
     async with _test_db(test_db_url) as db:
+        await db.execute(text("DELETE FROM artifacts WHERE execution_id IN (SELECT id FROM executions WHERE work_item_id = :wid)"), {"wid": wi_id})
+        await db.execute(text("DELETE FROM execution_events WHERE execution_id IN (SELECT id FROM executions WHERE work_item_id = :wid)"), {"wid": wi_id})
+        await db.execute(text("DELETE FROM messages WHERE execution_id IN (SELECT id FROM executions WHERE work_item_id = :wid)"), {"wid": wi_id})
+        await db.execute(text("DELETE FROM checkpoint_responses WHERE execution_id IN (SELECT id FROM executions WHERE work_item_id = :wid)"), {"wid": wi_id})
         await db.execute(text("DELETE FROM executions WHERE work_item_id = :wid"), {"wid": wi_id})
         await db.execute(text("DELETE FROM checkpoints WHERE policy_id = :pid"), {"pid": policy_id})
         await db.execute(text("DELETE FROM policy_stages WHERE policy_id = :pid"), {"pid": policy_id})
@@ -405,3 +409,146 @@ async def test_execution_number_increments(
     r3 = await async_client.get(f"/executions/{exec_id_2}", headers=auth_headers)
     assert r3.status_code == 200, r3.text
     assert r3.json()["execution_number"] == 2
+
+
+@pytest.mark.asyncio
+async def test_send_guidance_message_queued(
+    async_client: AsyncClient, auth_headers, work_item_with_policy
+):
+    wi_id = work_item_with_policy["work_item_id"]
+    r = await async_client.post(f"/work-items/{wi_id}/executions", headers=auth_headers)
+    assert r.status_code == 202, r.text
+    exec_id = r.json()["execution_id"]
+
+    r2 = await async_client.post(
+        f"/executions/{exec_id}/messages",
+        json={"content": "Please focus on the error handling path."},
+        headers=auth_headers,
+    )
+    assert r2.status_code == 201, r2.text
+    body = r2.json()
+    assert body["execution_id"] == exec_id
+    assert body["content"] == "Please focus on the error handling path."
+    assert "id" in body
+    assert "created_at" in body
+
+
+@pytest.mark.asyncio
+async def test_send_guidance_message_emits_event(
+    async_client: AsyncClient, auth_headers, work_item_with_policy
+):
+    wi_id = work_item_with_policy["work_item_id"]
+    r = await async_client.post(f"/work-items/{wi_id}/executions", headers=auth_headers)
+    exec_id = r.json()["execution_id"]
+
+    await async_client.post(
+        f"/executions/{exec_id}/messages",
+        json={"content": "Check the logs too."},
+        headers=auth_headers,
+    )
+
+    r2 = await async_client.get(f"/executions/{exec_id}/events", headers=auth_headers)
+    assert r2.status_code == 200, r2.text
+    events = r2.json()
+    human_events = [e for e in events if e["event_type"] == "human.message"]
+    assert len(human_events) == 1
+    assert human_events[0]["actor_type"] == "human"
+    assert "preview" in human_events[0]["payload"]
+
+
+@pytest.mark.asyncio
+async def test_send_guidance_message_terminal_execution(
+    async_client: AsyncClient, auth_headers, work_item_with_policy, test_db_url: str
+):
+    wi_id = work_item_with_policy["work_item_id"]
+    r = await async_client.post(f"/work-items/{wi_id}/executions", headers=auth_headers)
+    exec_id = r.json()["execution_id"]
+
+    async with _test_db(test_db_url) as db:
+        await db.execute(
+            text("UPDATE executions SET status = 'completed' WHERE id = :eid"),
+            {"eid": exec_id},
+        )
+        await db.commit()
+
+    r2 = await async_client.post(
+        f"/executions/{exec_id}/messages",
+        json={"content": "Too late."},
+        headers=auth_headers,
+    )
+    assert r2.status_code == 422, r2.text
+    assert r2.json()["detail"]["error"] == "execution_terminal"
+
+
+@pytest.mark.asyncio
+async def test_send_guidance_message_blank_content(
+    async_client: AsyncClient, auth_headers, work_item_with_policy
+):
+    wi_id = work_item_with_policy["work_item_id"]
+    r = await async_client.post(f"/work-items/{wi_id}/executions", headers=auth_headers)
+    exec_id = r.json()["execution_id"]
+
+    r2 = await async_client.post(
+        f"/executions/{exec_id}/messages",
+        json={"content": "   "},
+        headers=auth_headers,
+    )
+    assert r2.status_code == 422, r2.text
+    assert r2.json()["detail"]["error"] == "content_empty"
+
+
+@pytest.mark.asyncio
+async def test_send_guidance_message_not_found(
+    async_client: AsyncClient, auth_headers
+):
+    r = await async_client.post(
+        f"/executions/{uuid.uuid4()}/messages",
+        json={"content": "hello"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 404, r.text
+
+
+@pytest.mark.asyncio
+async def test_get_execution_includes_artifacts(
+    async_client: AsyncClient, auth_headers, work_item_with_policy, test_db_url: str
+):
+    """GET /executions/{id} returns artifacts array with correct fields."""
+    wi_id = work_item_with_policy["work_item_id"]
+    stage_id = work_item_with_policy["stage_id"]
+
+    # Create an execution
+    r = await async_client.post(f"/work-items/{wi_id}/executions", headers=auth_headers)
+    exec_id = r.json()["execution_id"]
+
+    # Insert an artifact row directly
+    artifact_id = str(uuid.uuid4())
+    async with _test_db(test_db_url) as db:
+        await db.execute(
+            text(
+                "INSERT INTO artifacts (id, execution_id, stage_id, name, type, url, created_at) "
+                "VALUES (:id, :eid, :sid, :name, :type, :url, now())"
+            ),
+            {
+                "id": artifact_id,
+                "eid": exec_id,
+                "sid": stage_id,
+                "name": "Stage 1 — google-doc-abc",
+                "type": "google_doc",
+                "url": "https://docs.google.com/document/d/abc/edit",
+            },
+        )
+        await db.commit()
+
+    r2 = await async_client.get(f"/executions/{exec_id}", headers=auth_headers)
+    assert r2.status_code == 200, r2.text
+    body = r2.json()
+
+    assert "artifacts" in body
+    assert len(body["artifacts"]) == 1
+    a = body["artifacts"][0]
+    assert a["id"] == artifact_id
+    assert a["name"] == "Stage 1 — google-doc-abc"
+    assert a["type"] == "google_doc"
+    assert a["url"] == "https://docs.google.com/document/d/abc/edit"
+    assert a["stage_id"] == stage_id

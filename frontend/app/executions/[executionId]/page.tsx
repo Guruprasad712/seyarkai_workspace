@@ -7,6 +7,7 @@ import { apiFetch, ApiError } from "@/lib/api"
 import { useAuth } from "@/components/auth-provider"
 import { Button } from "@/components/ui/button"
 import type {
+  ArtifactOut,
   CheckpointBrief,
   EventOut,
   ExecutionOut,
@@ -95,6 +96,16 @@ function describeEvent(ev: EventOut): string {
     }
     case "execution.failed":
       return `Failed: ${p.error}`
+    case "human.message": {
+      const preview = String(p.preview ?? "")
+      return `Guidance: ${preview.length > 120 ? preview.slice(0, 120) + "…" : preview}`
+    }
+    case "artifact.created":
+      return `Document created: ${String(p.name ?? "")}`
+    case "executor.response": {
+      const preview = String(p.preview ?? "")
+      return `Answer: ${preview.length > 120 ? preview.slice(0, 120) + "…" : preview}`
+    }
     default:
       return ev.event_type
   }
@@ -219,6 +230,162 @@ function CheckpointActions({
       {error && (
         <p className="text-xs text-destructive">{error}</p>
       )}
+    </div>
+  )
+}
+
+// ─── Guidance Input ───────────────────────────────────────────────────────────
+
+function GuidanceInput({ executionId }: { executionId: string }) {
+  const [text, setText] = useState("")
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState("")
+
+  async function handleSend() {
+    if (!text.trim()) return
+    setError("")
+    setSending(true)
+    try {
+      await apiFetch(`/executions/${executionId}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ content: text.trim() }),
+      })
+      setText("")
+      setSent(true)
+      setTimeout(() => setSent(false), 3000)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to send")
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border">
+      <p className="text-xs font-medium text-muted-foreground mb-2">GUIDANCE</p>
+      <p className="text-xs text-muted-foreground mb-2">
+        Leave a note for the agent — it will be injected before the next stage.
+      </p>
+      <textarea
+        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+        rows={3}
+        placeholder="e.g. Focus on the error handling path…"
+        value={text}
+        onChange={e => setText(e.target.value)}
+        disabled={sending}
+      />
+      {error && <p className="text-xs text-destructive mt-1">{error}</p>}
+      {sent && <p className="text-xs text-green-600 dark:text-green-400 mt-1">Sent ✓</p>}
+      <Button
+        size="sm"
+        className="mt-2 w-full"
+        disabled={sending || !text.trim()}
+        onClick={handleSend}
+      >
+        {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+        {sending ? "Sending…" : "Send Guidance"}
+      </Button>
+    </div>
+  )
+}
+
+// ─── Knowledge Event Row ──────────────────────────────────────────────────────
+
+type KnowledgeDoc = { id: string; title: string; age_days: number; freshness: string }
+
+function KnowledgeEventRow({ ev }: { ev: EventOut }) {
+  const [open, setOpen] = useState(false)
+  const p = ev.payload
+  const docs = (p.documents ?? []) as KnowledgeDoc[]
+  const staleCount = Number(p.stale_count ?? 0)
+  const label = staleCount
+    ? `Knowledge: ${docs.length} doc(s) retrieved (${staleCount} stale)`
+    : `Knowledge: ${docs.length} doc(s) retrieved`
+
+  return (
+    <div className="py-1">
+      <div className="flex items-start gap-2">
+        <span className="text-xs tabular-nums text-muted-foreground shrink-0 mt-0.5 w-20">
+          {fmtTime(ev.created_at)}
+        </span>
+        <ActorBadge actor={ev.actor_type} />
+        <button
+          className="text-xs text-foreground leading-relaxed text-left hover:underline"
+          onClick={() => setOpen((v) => !v)}
+        >
+          {label} {docs.length > 0 ? (open ? "▲" : "▼") : ""}
+        </button>
+      </div>
+      {open && docs.length > 0 && (
+        <div className="ml-[88px] mt-1 space-y-0.5">
+          {docs.map((d) => (
+            <div key={d.id} className="flex items-center gap-2 text-xs">
+              <span className={
+                d.freshness === "stale"
+                  ? "text-red-600 dark:text-red-400 font-medium"
+                  : d.freshness === "ageing"
+                  ? "text-orange-500 dark:text-orange-400"
+                  : "text-muted-foreground"
+              }>
+                {d.title}
+              </span>
+              {d.freshness !== "fresh" && (
+                <span className={`inline-flex items-center rounded px-1 py-0 text-[10px] font-medium ${
+                  d.freshness === "stale"
+                    ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                    : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+                }`}>
+                  {d.freshness.toUpperCase()} ({d.age_days}d)
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Artifacts Panel ──────────────────────────────────────────────────────────
+
+function ArtifactsPanel({ artifacts }: { artifacts: ArtifactOut[] }) {
+  if (artifacts.length === 0) {
+    return (
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        No documents generated yet.
+      </div>
+    )
+  }
+  return (
+    <div className="flex-1 overflow-y-auto p-5 space-y-3">
+      {artifacts.map((a) => (
+        <div key={a.id} className="rounded-lg border border-border p-4 space-y-1">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-medium truncate">{a.name}</span>
+            <span className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+              a.type === "google_doc"
+                ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                : "bg-muted text-muted-foreground"
+            }`}>
+              {a.type === "google_doc" ? "Google Doc" : "HTML"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">
+              {new Date(a.created_at).toLocaleString()}
+            </span>
+            <a
+              href={a.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-blue-600 hover:underline dark:text-blue-400"
+            >
+              Open Document ↗
+            </a>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -414,7 +581,7 @@ export default function ExecutionWorkspacePage({
   const [events, setEvents] = useState<EventOut[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [activeTab, setActiveTab] = useState<"timeline" | "summary">("timeline")
+  const [activeTab, setActiveTab] = useState<"timeline" | "artifacts" | "summary">("timeline")
   const [summary, setSummary] = useState<ExecutionSummaryOut | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
 
@@ -617,22 +784,28 @@ export default function ExecutionWorkspacePage({
           <StatusBadge status={execution.status} />
         </div>
         <div className="flex items-center gap-3">
-          {TERMINAL.has(execution.status) && (
-            <div className="flex items-center rounded-md border border-border text-xs overflow-hidden">
-              <button
-                className={`px-3 py-1.5 transition-colors ${activeTab === "timeline" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
-                onClick={() => setActiveTab("timeline")}
-              >
-                Timeline
-              </button>
+          <div className="flex items-center rounded-md border border-border text-xs overflow-hidden">
+            <button
+              className={`px-3 py-1.5 transition-colors ${activeTab === "timeline" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => setActiveTab("timeline")}
+            >
+              Timeline
+            </button>
+            <button
+              className={`px-3 py-1.5 transition-colors ${activeTab === "artifacts" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => setActiveTab("artifacts")}
+            >
+              Artifacts
+            </button>
+            {TERMINAL.has(execution.status) && (
               <button
                 className={`px-3 py-1.5 transition-colors ${activeTab === "summary" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
                 onClick={() => { setActiveTab("summary"); loadSummary() }}
               >
                 Summary
               </button>
-            </div>
-          )}
+            )}
+          </div>
           {!TERMINAL.has(execution.status) && (
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -641,6 +814,11 @@ export default function ExecutionWorkspacePage({
           )}
         </div>
       </div>
+
+      {/* Artifacts tab */}
+      {activeTab === "artifacts" && (
+        <ArtifactsPanel artifacts={execution.artifacts} />
+      )}
 
       {/* Summary view */}
       {activeTab === "summary" && TERMINAL.has(execution.status) && (
@@ -659,7 +837,7 @@ export default function ExecutionWorkspacePage({
       )}
 
       {/* Three-column workspace */}
-      <div className={`grid flex-1 overflow-hidden lg:grid-cols-[280px_1fr_300px] ${activeTab === "summary" ? "hidden" : ""}`}>
+      <div className={`grid flex-1 overflow-hidden lg:grid-cols-[280px_1fr_300px] ${activeTab !== "timeline" ? "hidden" : ""}`}>
 
         {/* LEFT — Stage info */}
         <div className="flex flex-col gap-4 border-r border-border overflow-y-auto px-4 py-5">
@@ -720,17 +898,21 @@ export default function ExecutionWorkspacePage({
             {events.length === 0 ? (
               <p className="text-xs text-muted-foreground">No events yet.</p>
             ) : (
-              events.map((ev) => (
-                <div key={ev.id} className="flex items-start gap-2 py-1">
-                  <span className="text-xs tabular-nums text-muted-foreground shrink-0 mt-0.5 w-20">
-                    {fmtTime(ev.created_at)}
-                  </span>
-                  <ActorBadge actor={ev.actor_type} />
-                  <span className="text-xs text-foreground leading-relaxed">
-                    {describeEvent(ev)}
-                  </span>
-                </div>
-              ))
+              events.map((ev) =>
+                ev.event_type === "knowledge.retrieved" ? (
+                  <KnowledgeEventRow key={ev.id} ev={ev} />
+                ) : (
+                  <div key={ev.id} className="flex items-start gap-2 py-1">
+                    <span className="text-xs tabular-nums text-muted-foreground shrink-0 mt-0.5 w-20">
+                      {fmtTime(ev.created_at)}
+                    </span>
+                    <ActorBadge actor={ev.actor_type} />
+                    <span className="text-xs text-foreground leading-relaxed">
+                      {describeEvent(ev)}
+                    </span>
+                  </div>
+                )
+              )
             )}
             {!TERMINAL.has(execution.status) && (
               <div className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground">
@@ -789,6 +971,10 @@ export default function ExecutionWorkspacePage({
             </div>
           ) : TERMINAL.has(execution.status) ? null : (
             <p className="text-xs text-muted-foreground">No checkpoint pending.</p>
+          )}
+
+          {!TERMINAL.has(execution.status) && (
+            <GuidanceInput executionId={executionId} />
           )}
         </div>
       </div>

@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from app.executions.models import Execution, ExecutionEvent, Message
+from app.executions.models import Artifact, Execution, ExecutionEvent, Message  # noqa: F401
 from app.policies.models import Checkpoint, PolicyStage
 
 
@@ -30,6 +30,26 @@ class CheckpointBrief(BaseModel):
         )
 
 
+class ArtifactOut(BaseModel):
+    id: str
+    name: str
+    type: str
+    url: str
+    stage_id: str
+    created_at: datetime
+
+    @classmethod
+    def from_orm(cls, obj: Artifact) -> "ArtifactOut":
+        return cls(
+            id=str(obj.id),
+            name=obj.name,
+            type=obj.type,
+            url=obj.url,
+            stage_id=str(obj.stage_id),
+            created_at=obj.created_at,
+        )
+
+
 class ExecutionOut(BaseModel):
     id: str
     work_item_id: str
@@ -43,12 +63,14 @@ class ExecutionOut(BaseModel):
     error: str | None
     pending_summary: str | None
     created_at: datetime
+    artifacts: list[ArtifactOut] = []
 
     @classmethod
     def from_orm(
         cls,
         obj: Execution,
         blocking_checkpoint: Checkpoint | None = None,
+        artifacts: list[Artifact] | None = None,
     ) -> "ExecutionOut":
         return cls(
             id=str(obj.id),
@@ -63,6 +85,7 @@ class ExecutionOut(BaseModel):
             error=obj.error,
             pending_summary=obj.pending_summary,
             created_at=obj.created_at,
+            artifacts=[ArtifactOut.from_orm(a) for a in (artifacts or [])],
         )
 
 
@@ -150,3 +173,33 @@ class CheckpointResponseOut(BaseModel):
     execution_id: str
     status: str
     next_action: str
+
+
+class GuidanceMessageIn(BaseModel):
+    content: str
+
+
+class GuidanceMessageOut(BaseModel):
+    id: str
+    execution_id: str
+    content: str
+    created_at: datetime
+
+    @classmethod
+    def from_orm(cls, obj: Message) -> "GuidanceMessageOut":
+        return cls(
+            id=str(obj.id),
+            execution_id=str(obj.execution_id),
+            content=obj.content,
+            created_at=obj.created_at,
+        )
+
+
+class AskIn(BaseModel):
+    question: str
+
+
+class AskOut(BaseModel):
+    question_message_id: str
+    answer_message_id: str
+    answer: str

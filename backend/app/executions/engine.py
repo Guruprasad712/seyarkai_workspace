@@ -15,7 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.models import AgentVersion, AgentVersionTool, McpTool
 from app.core.config import settings
-from app.executions.models import Execution, ExecutionEvent, Message
+from app.executions.models import Artifact, Execution, ExecutionEvent, Message
+from app.knowledge.retrievers import KnowledgeRetriever, build_injection_block
 from app.policies.models import Checkpoint, Policy, PolicyStage
 from app.projects.models import Project  # noqa: F401 — ensures projects table is in mapper metadata
 from app.runtime import StageError, run_stage
@@ -76,8 +77,13 @@ async def _persist_event(
 
 
 class ExecutionEngine:
-    def __init__(self, session_factory: Any | None = None) -> None:
+    def __init__(
+        self,
+        session_factory: Any | None = None,
+        retriever: KnowledgeRetriever | None = None,
+    ) -> None:
         self._session_factory = session_factory
+        self._retriever = retriever
 
     def _get_session_factory(self):
         if self._session_factory is not None:
@@ -228,7 +234,45 @@ class ExecutionEngine:
                     for msg in prior_outputs:
                         task_text += f"\n---\n{msg.content[:2000]}"
 
-                # TODO(D7): inject knowledge block here
+                # Knowledge injection (D6)
+                retriever = self._retriever
+                if retriever is None:
+                    from app.knowledge.retrievers import VertexSearchRetriever
+                    retriever = VertexSearchRetriever(
+                        db_session_factory=self._get_session_factory(),
+                        project=settings.GOOGLE_CLOUD_PROJECT,
+                        location=settings.VERTEX_SEARCH_LOCATION,
+                        data_store_id=settings.VERTEX_SEARCH_DATA_STORE_ID,
+                        ageing_days=settings.KNOWLEDGE_AGEING_DAYS,
+                        stale_days=settings.KNOWLEDGE_STALE_DAYS,
+                    )
+                knowledge_query = f"{work_item.objective} {stage.description}"
+                try:
+                    hits = await retriever.search(
+                        knowledge_query, top_k=settings.KNOWLEDGE_TOP_K
+                    )
+                except Exception:
+                    hits = []
+
+                if hits:
+                    task_text += f"\n\n{build_injection_block(hits)}"
+                    await _persist_event(
+                        db, execution_id, sid,
+                        "knowledge.retrieved", "system",
+                        {
+                            "documents": [
+                                {
+                                    "id": h.document_id,
+                                    "title": h.title,
+                                    "age_days": h.age_days,
+                                    "freshness": h.freshness,
+                                }
+                                for h in hits
+                            ],
+                            "stale_count": sum(1 for h in hits if h.freshness == "stale"),
+                        },
+                    )
+                    await db.commit()
 
                 # Consume pending human guidance
                 result = await db.execute(
@@ -273,9 +317,41 @@ class ExecutionEngine:
                         await db.commit()
                         break
 
-                    # Persist the contract event; truncate agent.message to preview
+                    # Detect generate_document tool result → write artifact row + event
+                    if (
+                        event["event_type"] == "tool.result"
+                        and event["payload"].get("tool_name") == "generate_document"
+                    ):
+                        structured = event["payload"].get("structured_result")
+                        if isinstance(structured, dict):
+                            doc_id = structured.get("document_id", "")
+                            url = structured.get("url", "")
+                            artifact_type = "html" if doc_id.startswith("html-") else "google_doc"
+                            artifact_name = f"{stage.name} — {doc_id}"
+                            artifact = Artifact(
+                                id=uuid.uuid4(),
+                                execution_id=execution_id,
+                                stage_id=stage.id,
+                                name=artifact_name,
+                                type=artifact_type,
+                                url=url,
+                                created_at=_now(),
+                            )
+                            db.add(artifact)
+                            await _persist_event(
+                                db, execution_id, sid,
+                                "artifact.created", "agent",
+                                {"artifact_id": str(artifact.id), "name": artifact_name, "url": url},
+                            )
+                            await db.commit()
+                        # Fall through — also persist the tool.result event below
+
+                    # Persist the contract event; strip internal keys, truncate agent.message
                     payload = event["payload"]
-                    if event["event_type"] == "agent.message":
+                    if event["event_type"] == "tool.result":
+                        # structured_result is engine-internal — never stored in DB
+                        payload = {k: v for k, v in payload.items() if k != "structured_result"}
+                    elif event["event_type"] == "agent.message":
                         payload = {"preview": event["payload"].get("text", "")[:500]}
 
                     await _persist_event(
