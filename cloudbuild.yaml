@@ -1,0 +1,41 @@
+steps:
+  # Build backend image — context is backend/
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/project-6c036441-c06e-4a0b-bbf/seyarkai-images/backend:latest'
+      - '.'
+    dir: 'backend'
+
+  # Build frontend image — context is frontend/
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/project-6c036441-c06e-4a0b-bbf/seyarkai-images/frontend:latest'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_API_URL=https://seyarkai-backend-337434518869.us-central1.run.app'
+      - '.'
+    dir: 'frontend'
+
+  # Push backend
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/project-6c036441-c06e-4a0b-bbf/seyarkai-images/backend:latest'
+
+  # Push frontend
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/project-6c036441-c06e-4a0b-bbf/seyarkai-images/frontend:latest'
+
+images:
+  - 'us-central1-docker.pkg.dev/project-6c036441-c06e-4a0b-bbf/seyarkai-images/backend:latest'
+  - 'us-central1-docker.pkg.dev/project-6c036441-c06e-4a0b-bbf/seyarkai-images/frontend:latest'
+
+timeout: '3600s'
+
+options:
+  defaultLogsBucketBehavior: REGIONAL_USER_OWNED_BUCKET
