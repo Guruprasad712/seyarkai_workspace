@@ -10,9 +10,9 @@ AI agents (Google ADK + Gemini) execute multi-stage Work Items under human-appro
 
 | Service | URL |
 |---|---|
-| Frontend | https://seyarkai-frontend-337434518869.us-central1.run.app |
-| Backend API | https://seyarkai-backend-337434518869.us-central1.run.app |
-| Health check | https://seyarkai-backend-337434518869.us-central1.run.app/health |
+| Frontend | https://seyarkai-frontend-7mzqwq6i7q-uc.a.run.app |
+| Backend API | https://seyarkai-backend-7mzqwq6i7q-uc.a.run.app |
+| Health check | https://seyarkai-backend-7mzqwq6i7q-uc.a.run.app/health |
 
 ---
 

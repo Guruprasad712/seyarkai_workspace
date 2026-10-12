@@ -1,6 +1,6 @@
 #!/bin/bash
 # Usage: ./deploy-frontend.sh <BACKEND_URL>
-# e.g.:  ./deploy-frontend.sh https://seyarkai-backend-337434518869.us-central1.run.app
+# e.g.:  ./deploy-frontend.sh https://seyarkai-backend-7mzqwq6i7q-uc.a.run.app
 # Note:  NEXT_PUBLIC_API_URL is a build-time arg — rebuild the image if the backend URL changes.
 set -euo pipefail
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Usage: ./deploy-backend.sh <FRONTEND_URL>
-# e.g.:  ./deploy-backend.sh https://seyarkai-frontend-337434518869.us-central1.run.app
+# e.g.:  ./deploy-backend.sh https://seyarkai-frontend-7mzqwq6i7q-uc.a.run.app
 set -euo pipefail
 
 FRONTEND_URL=${1:?"Usage: $0 <FRONTEND_URL>"}

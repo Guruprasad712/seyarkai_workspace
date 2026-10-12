@@ -15,7 +15,7 @@ steps:
       - '-t'
       - 'us-central1-docker.pkg.dev/project-6c036441-c06e-4a0b-bbf/seyarkai-images/frontend:latest'
       - '--build-arg'
-      - 'NEXT_PUBLIC_API_URL=https://seyarkai-backend-337434518869.us-central1.run.app'
+      - 'NEXT_PUBLIC_API_URL=https://seyarkai-backend-7mzqwq6i7q-uc.a.run.app'
       - '.'
     dir: 'frontend'
 
