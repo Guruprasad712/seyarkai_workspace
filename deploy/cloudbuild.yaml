@@ -34,3 +34,6 @@ images:
   - 'us-central1-docker.pkg.dev/project-6c036441-c06e-4a0b-bbf/seyarkai-images/frontend:latest'
 
 timeout: '3600s'
+
+options:
+  defaultLogsBucketBehavior: REGIONAL_USER_OWNED_BUCKET
