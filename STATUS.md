@@ -69,8 +69,23 @@ Date: 2026-10-11   Region: us-central1
 - [x] D7: Frontend Artifacts tab — always-visible tab toggle (Timeline / Artifacts / Summary); `ArtifactsPanel` lists documents with type badge (Google Doc / HTML), timestamp, "Open Document ↗" link; empty state shown when none
 - [x] D7: Frontend `knowledge.retrieved` expandable row — click to expand sub-list of retrieved docs; fresh=muted, ageing=orange, stale=red + age badge; replaces flat one-liner; `artifact.created` and `executor.response` descriptions added to `describeEvent`
 
+### Done (Day 8)
+- [x] Cloud SQL migration applied (0001, 0002, 0003); 17 tables verified
+- [x] Demo corpus seeded (8 documents); admin + reviewer + analyst users seeded
+- [x] Docker images built and pushed via Cloud Build (no local Docker); `cloudbuild.yaml` at repo root + `deploy/cloudbuild.yaml`
+- [x] Backend deployed on Cloud Run (CPU always on, 1/1 instances, 3600s timeout, Cloud SQL socket)
+- [x] Frontend deployed on Cloud Run (`NEXT_PUBLIC_API_URL` baked in at build time via `--build-arg`)
+- [x] Secrets referenced from Secret Manager (`DATABASE_URL=db-url`, `JWT_SECRET=jwt-secret`, `GEMINI_API_KEY=gemini-api-key`)
+- [x] CORS configured: `CORS_ORIGINS` set to frontend URL on backend service
+- [x] `deploy/deploy-backend.sh` and `deploy/deploy-frontend.sh` scripts created
+- [x] Smoke test: `/health` → `{"status":"ok"}`; no secrets in logs
+
+### Live URLs (Day 8)
+- Backend: https://seyarkai-backend-337434518869.us-central1.run.app
+- Frontend: https://seyarkai-frontend-337434518869.us-central1.run.app
+
 ### Next
-Day 8 — Cloud Run deploy: Cloud SQL migration, Secret Manager wiring, `deploy/` scripts, CI docker build→push→deploy; smoke test live endpoints.
+Day 9 — CI pipeline: GitHub Actions build→push→deploy; end-to-end live execution smoke test.
 
 ### Decision log
 - LLM access is Vertex AI via ADC; AI Studio prepay was unfunded so `GOOGLE_GENAI_USE_VERTEXAI=1` is the only working path.
