@@ -166,10 +166,6 @@ class VertexSearchRetriever(KnowledgeRetriever):
                     return_snippet=True,
                     max_snippet_count=3,
                 ),
-                extractive_content_spec=de.SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
-                    max_extractive_answers_count=1,
-                    max_extractive_segments_count=2,
-                ),
             ),
         )
         response = client.search(request)
