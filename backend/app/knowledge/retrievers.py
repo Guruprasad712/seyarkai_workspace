@@ -133,11 +133,13 @@ class VertexSearchRetriever(KnowledgeRetriever):
             if lv.tzinfo is None:
                 lv = lv.replace(tzinfo=timezone.utc)
             age_days = (now - lv).days
+            # Prefer Vertex snippet; fall back to DB content (first 800 chars)
+            snippet = r["snippet"] or (doc.content[:800] if doc.content else "")
             hits.append(
                 KnowledgeHit(
                     document_id=r["id"],
                     title=doc.title,
-                    snippet=r["snippet"],
+                    snippet=snippet,
                     score=r["score"],
                     last_verified_at=lv,
                     age_days=age_days,
