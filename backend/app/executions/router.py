@@ -9,7 +9,7 @@ from sse_starlette.sse import EventSourceResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.models import AgentVersion
+from app.agents.models import Agent, AgentVersion
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.core.config import settings
@@ -689,8 +689,11 @@ async def ask_executor(
     context_parts.append(f"\nQuestion from reviewer: {body.question.strip()}")
     ask_text = "\n".join(context_parts)
 
+    agent_row = await db.get(Agent, agent_version.agent_id)
+    ask_agent_name = agent_row.name if agent_row else "stage_agent"
+
     agent_definition = {
-        "name": agent_version.instructions[:60].replace(" ", "_"),
+        "name": ask_agent_name,
         "instructions": agent_version.instructions,
         "capabilities": agent_version.capabilities or [],
     }

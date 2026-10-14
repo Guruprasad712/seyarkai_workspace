@@ -13,7 +13,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.models import AgentVersion, AgentVersionTool, McpTool
+from app.agents.models import Agent, AgentVersion, AgentVersionTool, McpTool
 from app.core.config import settings
 from app.executions.models import Artifact, Execution, ExecutionEvent, Message
 from app.knowledge.retrievers import KnowledgeRetriever, build_injection_block
@@ -186,6 +186,9 @@ class ExecutionEngine:
                 )
                 agent_version = result.scalar_one()
 
+                agent_row = await db.get(Agent, agent_version.agent_id)
+                agent_name = agent_row.name if agent_row else "stage_agent"
+
                 result = await db.execute(
                     select(McpTool)
                     .join(AgentVersionTool, AgentVersionTool.mcp_tool_id == McpTool.id)
@@ -195,7 +198,7 @@ class ExecutionEngine:
                 tool_names = [t.tool_name for t in tools]
 
                 agent_definition = {
-                    "name": agent_version.instructions[:60].replace(" ", "_"),
+                    "name": agent_name,
                     "instructions": agent_version.instructions,
                     "capabilities": agent_version.capabilities or [],
                 }

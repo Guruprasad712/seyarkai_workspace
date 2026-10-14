@@ -73,7 +73,11 @@ def build_agent(
     model: Any = agent_definition.get("_model") or settings.GEMINI_MODEL_FAST or "gemini-2.5-flash"
     # LlmAgent requires the name to be a valid Python identifier
     raw_name = agent_definition.get("name", "stage_agent")
-    name = raw_name.replace("-", "_")
+    # ADK requires a valid Python identifier: replace any non-alphanumeric char with _
+    import re as _re
+    name = _re.sub(r"[^a-zA-Z0-9]", "_", raw_name) or "stage_agent"
+    if name[0].isdigit():
+        name = "agent_" + name
     instructions = agent_definition.get("instructions", "")
 
     toolsets: list[McpToolset] = []
