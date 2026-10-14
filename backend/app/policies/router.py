@@ -246,14 +246,18 @@ def _build_generate_prompt(
                 f"  type: human",
                 f"  name: {detail['name']}",
             ]
+    ai_ids = [d["worker_id"] for d in worker_details if d["type"] == "ai_agent"]
+    human_ids = [d["worker_id"] for d in worker_details if d["type"] == "human"]
     lines += [
         "",
         "## Output Rules",
         "1. Prefer AI agents for work tasks.",
         "2. Add checkpoints where human judgement is needed.",
         "3. End with EXACTLY one final_review checkpoint with stage_index null.",
-        "4. worker_ref and assignee_ref MUST be worker_id values from the list above.",
-        "5. Non-final checkpoints MUST have a zero-based stage_index (integer).",
+        f"4. stage worker_ref MUST be one of these AI worker IDs ONLY: {ai_ids}",
+        f"5. checkpoint assignee_ref MUST be one of these human worker IDs ONLY: {human_ids}",
+        "6. Non-final checkpoints MUST have a zero-based stage_index (integer).",
+        "CRITICAL: Never use a human worker_id as a stage worker_ref. Stages are only for AI agents.",
         "",
         "## Required Output Schema",
         "Return ONLY valid JSON — no markdown fences, no commentary, nothing else.",
