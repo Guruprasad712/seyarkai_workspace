@@ -161,6 +161,16 @@ class VertexSearchRetriever(KnowledgeRetriever):
             serving_config=serving_config,
             query=query,
             page_size=top_k,
+            content_search_spec=de.SearchRequest.ContentSearchSpec(
+                snippet_spec=de.SearchRequest.ContentSearchSpec.SnippetSpec(
+                    return_snippet=True,
+                    max_snippet_count=3,
+                ),
+                extractive_content_spec=de.SearchRequest.ContentSearchSpec.ExtractiveContentSpec(
+                    max_extractive_answers_count=1,
+                    max_extractive_segments_count=2,
+                ),
+            ),
         )
         response = client.search(request)
         results = []
@@ -171,8 +181,21 @@ class VertexSearchRetriever(KnowledgeRetriever):
                 continue
             snippet = ""
             if doc and doc.derived_struct_data:
+                # Try snippets first
                 snippets = doc.derived_struct_data.get("snippets", [])
                 if snippets:
-                    snippet = snippets[0].get("snippet", "")
+                    snippet = " … ".join(
+                        s.get("snippet", "") for s in snippets if s.get("snippet")
+                    )
+                # Fall back to extractive answers
+                if not snippet:
+                    answers = doc.derived_struct_data.get("extractive_answers", [])
+                    if answers:
+                        snippet = answers[0].get("content", "")
+                # Fall back to extractive segments
+                if not snippet:
+                    segments = doc.derived_struct_data.get("extractive_segments", [])
+                    if segments:
+                        snippet = segments[0].get("content", "")
             results.append({"id": doc_id, "snippet": snippet, "score": 0.0})
         return results
