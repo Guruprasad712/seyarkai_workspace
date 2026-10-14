@@ -134,7 +134,7 @@ class VertexSearchRetriever(KnowledgeRetriever):
                 lv = lv.replace(tzinfo=timezone.utc)
             age_days = (now - lv).days
             # Prefer Vertex snippet; fall back to DB content (first 800 chars)
-            snippet = r["snippet"] or (doc.content[:800] if doc.content else "")
+            snippet = r["snippet"] or (doc.content[:2000] if doc.content else "")
             hits.append(
                 KnowledgeHit(
                     document_id=r["id"],
@@ -164,7 +164,7 @@ class VertexSearchRetriever(KnowledgeRetriever):
             content_search_spec=de.SearchRequest.ContentSearchSpec(
                 snippet_spec=de.SearchRequest.ContentSearchSpec.SnippetSpec(
                     return_snippet=True,
-                    max_snippet_count=3,
+                    max_snippet_count=5,
                 ),
             ),
         )

@@ -492,5 +492,9 @@ class ExecutionEngine:
             f"Expected outcome: {work_item.expected_outcome}",
             f"You are performing stage {stage.sequence} of {total}: {stage.name}\n"
             f"{stage.description}\nExpected output: {stage.expected_output}",
+            "IMPORTANT: Perform the actual work described above. Use your tools to search "
+            "for relevant information. Produce a detailed, structured output based on what "
+            "you actually find and analyse. Do NOT describe yourself or your capabilities — "
+            "deliver the specific output requested for this stage.",
         ]
         return "\n\n".join(parts)
