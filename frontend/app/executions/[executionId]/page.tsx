@@ -2,10 +2,15 @@
 
 import { use, useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { Loader2 } from "lucide-react"
+import { motion } from "motion/react"
 import { apiFetch, ApiError } from "@/lib/api"
 import { useAuth } from "@/components/auth-provider"
-import { Button } from "@/components/ui/button"
+import { GlassCard } from "@/components/glass-card"
+import { BigButton } from "@/components/big-button"
+import { StatusPill } from "@/components/status-pill"
+import { FreshnessBadge } from "@/components/freshness-badge"
+import { TabBar } from "@/components/tab-bar"
+import { InlineLoader } from "@/components/loader"
 import type {
   ArtifactOut,
   CheckpointBrief,
@@ -25,38 +30,6 @@ const EVENT_POLL_MS = 2000
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const statusColors: Record<string, string> = {
-  queued: "bg-muted text-muted-foreground",
-  running: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  waiting_for_approval: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
-  completed: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const cls = statusColors[status] ?? "bg-muted text-muted-foreground"
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>
-      {status.replace(/_/g, " ")}
-    </span>
-  )
-}
-
-const actorColors: Record<string, string> = {
-  system: "bg-muted text-muted-foreground",
-  agent: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  human: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-}
-
-function ActorBadge({ actor }: { actor: string }) {
-  const cls = actorColors[actor] ?? "bg-muted text-muted-foreground"
-  return (
-    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium shrink-0 ${cls}`}>
-      {actor}
-    </span>
-  )
-}
-
 function fmtTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
 }
@@ -64,54 +37,42 @@ function fmtTime(iso: string): string {
 function describeEvent(ev: EventOut): string {
   const p = ev.payload
   switch (ev.event_type) {
-    case "execution.started":
-      return `Execution #${p.execution_number} started`
-    case "stage.started":
-      return `Stage ${p.sequence} — ${p.name}`
-    case "tool.called":
-      return `Tool called: ${p.tool_name}`
+    case "execution.started":      return `Execution #${p.execution_number} started`
+    case "stage.started":          return `Stage ${p.sequence} — ${p.name}`
+    case "tool.called":            return `Tool called: ${p.tool_name}`
     case "tool.result": {
       const summary = String(p.summary ?? "")
       return `Tool result: ${summary.length > 100 ? summary.slice(0, 100) + "…" : summary}`
     }
     case "agent.message": {
       const preview = String(p.preview ?? "")
-      return `Agent: ${preview.length > 120 ? preview.slice(0, 120) + "…" : preview}`
+      return preview.length > 120 ? preview.slice(0, 120) + "…" : preview
     }
-    case "stage.completed":
-      return `Stage ${p.sequence} completed`
-    case "checkpoint.triggered":
-      return `Checkpoint reached — ${p.type}`
-    case "execution.paused":
-      return "Execution paused"
-    case "checkpoint.resolved":
-      return `Checkpoint ${p.decision}`
-    case "execution.resumed":
-      return "Execution resumed"
-    case "execution.completed":
-      return "Execution completed"
+    case "stage.completed":        return `Stage ${p.sequence} completed`
+    case "checkpoint.triggered":   return `Checkpoint reached — ${p.type}`
+    case "execution.paused":       return "Execution paused"
+    case "checkpoint.resolved":    return `Checkpoint ${p.decision}`
+    case "execution.resumed":      return "Execution resumed"
+    case "execution.completed":    return "Execution completed"
     case "agent.summary": {
       const s = String(p.summary ?? "")
       return `Summary: ${s.length > 120 ? s.slice(0, 120) + "…" : s}`
     }
-    case "execution.failed":
-      return `Failed: ${p.error}`
+    case "execution.failed":       return `Failed: ${p.error}`
     case "human.message": {
       const preview = String(p.preview ?? "")
       return `Guidance: ${preview.length > 120 ? preview.slice(0, 120) + "…" : preview}`
     }
-    case "artifact.created":
-      return `Document created: ${String(p.name ?? "")}`
+    case "artifact.created":       return `Document created: ${String(p.name ?? "")}`
     case "executor.response": {
       const preview = String(p.preview ?? "")
       return `Answer: ${preview.length > 120 ? preview.slice(0, 120) + "…" : preview}`
     }
-    default:
-      return ev.event_type
+    default:                       return ev.event_type
   }
 }
 
-// ─── Checkpoint Action Panel ──────────────────────────────────────────────────
+// ─── Checkpoint Actions ───────────────────────────────────────────────────────
 
 function CheckpointActions({
   executionId,
@@ -152,140 +113,59 @@ function CheckpointActions({
   const type = checkpoint.type
 
   return (
-    <div className="mt-3 space-y-2">
+    <div className="mt-4 space-y-3">
       {type === "input" ? (
         <>
           <textarea
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+            className="w-full rounded-xl glass px-4 py-3 text-sm text-white placeholder:text-white/30 resize-none focus:outline-none focus:ring-2 focus:ring-[#5B6CFF]/60 transition-all"
             rows={3}
             placeholder="Enter your input…"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             disabled={submitting}
           />
-          <Button
-            size="sm"
-            disabled={submitting || !inputText.trim()}
+          <BigButton
+            variant="gradient"
+            size="md"
+            className="w-full"
+            loading={submitting}
+            disabled={!inputText.trim()}
             onClick={() => respond("input_provided", undefined, inputText.trim())}
           >
-            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Submit"}
-          </Button>
+            Submit
+          </BigButton>
         </>
       ) : type === "final_review" ? (
         <div className="flex gap-2">
-          <Button
-            size="sm"
-            disabled={submitting}
-            onClick={() => respond("approve")}
-          >
-            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Complete ✓"}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={submitting}
-            onClick={() => respond("reject")}
-          >
+          <BigButton variant="gradient" size="sm" loading={submitting} onClick={() => respond("approve")}>
+            Complete ✓
+          </BigButton>
+          <BigButton variant="ghost" size="sm" disabled={submitting} onClick={() => respond("reject")}>
             Rework
-          </Button>
+          </BigButton>
         </div>
       ) : type === "review" ? (
         <div className="flex gap-2">
-          <Button
-            size="sm"
-            disabled={submitting}
-            onClick={() => respond("approve")}
-          >
-            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Accept"}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={submitting}
-            onClick={() => respond("reject")}
-          >
+          <BigButton variant="gradient" size="sm" loading={submitting} onClick={() => respond("approve")}>
+            Accept
+          </BigButton>
+          <BigButton variant="ghost" size="sm" disabled={submitting} onClick={() => respond("reject")}>
             Request Changes
-          </Button>
+          </BigButton>
         </div>
       ) : (
-        /* approval (default) */
         <div className="flex gap-2">
-          <Button
-            size="sm"
-            disabled={submitting}
-            onClick={() => respond("approve")}
-          >
-            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Approve"}
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            disabled={submitting}
-            onClick={() => respond("reject")}
-          >
+          <BigButton variant="gradient" size="sm" loading={submitting} onClick={() => respond("approve")}>
+            Approve
+          </BigButton>
+          <BigButton variant="danger" size="sm" disabled={submitting} onClick={() => respond("reject")}>
             Reject
-          </Button>
+          </BigButton>
         </div>
       )}
       {error && (
-        <p className="text-xs text-destructive">{error}</p>
+        <p className="text-xs text-[#EF4444] bg-[#EF4444]/10 px-3 py-2 rounded-lg border border-[#EF4444]/25">{error}</p>
       )}
-    </div>
-  )
-}
-
-// ─── Guidance Input ───────────────────────────────────────────────────────────
-
-function GuidanceInput({ executionId }: { executionId: string }) {
-  const [text, setText] = useState("")
-  const [sending, setSending] = useState(false)
-  const [sent, setSent] = useState(false)
-  const [error, setError] = useState("")
-
-  async function handleSend() {
-    if (!text.trim()) return
-    setError("")
-    setSending(true)
-    try {
-      await apiFetch(`/executions/${executionId}/messages`, {
-        method: "POST",
-        body: JSON.stringify({ content: text.trim() }),
-      })
-      setText("")
-      setSent(true)
-      setTimeout(() => setSent(false), 3000)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to send")
-    } finally {
-      setSending(false)
-    }
-  }
-
-  return (
-    <div className="mt-4 pt-4 border-t border-border">
-      <p className="text-xs font-medium text-muted-foreground mb-2">GUIDANCE</p>
-      <p className="text-xs text-muted-foreground mb-2">
-        Leave a note for the agent — it will be injected before the next stage.
-      </p>
-      <textarea
-        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-        rows={3}
-        placeholder="e.g. Focus on the error handling path…"
-        value={text}
-        onChange={e => setText(e.target.value)}
-        disabled={sending}
-      />
-      {error && <p className="text-xs text-destructive mt-1">{error}</p>}
-      {sent && <p className="text-xs text-green-600 dark:text-green-400 mt-1">Sent ✓</p>}
-      <Button
-        size="sm"
-        className="mt-2 w-full"
-        disabled={sending || !text.trim()}
-        onClick={handleSend}
-      >
-        {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-        {sending ? "Sending…" : "Send Guidance"}
-      </Button>
     </div>
   )
 }
@@ -294,7 +174,7 @@ function GuidanceInput({ executionId }: { executionId: string }) {
 
 type KnowledgeDoc = { id: string; title: string; age_days: number; freshness: string }
 
-function KnowledgeEventRow({ ev }: { ev: EventOut }) {
+function KnowledgeEventRow({ ev, isNew }: { ev: EventOut; isNew: boolean }) {
   const [open, setOpen] = useState(false)
   const p = ev.payload
   const docs = (p.documents ?? []) as KnowledgeDoc[]
@@ -304,101 +184,93 @@ function KnowledgeEventRow({ ev }: { ev: EventOut }) {
     : `Knowledge: ${docs.length} doc(s) retrieved`
 
   return (
-    <div className="py-1">
+    <motion.div
+      className="py-1.5"
+      initial={isNew ? { opacity: 0, y: 6 } : false}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+    >
       <div className="flex items-start gap-2">
-        <span className="text-xs tabular-nums text-muted-foreground shrink-0 mt-0.5 w-20">
+        <span className="font-mono text-xs text-white/35 shrink-0 mt-0.5 w-22">
           {fmtTime(ev.created_at)}
         </span>
-        <ActorBadge actor={ev.actor_type} />
+        <span className="shrink-0 inline-flex items-center rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-[#00DCC8]/15 text-[#00DCC8]">sys</span>
         <button
-          className="text-xs text-foreground leading-relaxed text-left hover:underline"
+          className="text-xs text-white/75 leading-relaxed text-left hover:text-white transition-colors"
           onClick={() => setOpen((v) => !v)}
         >
           {label} {docs.length > 0 ? (open ? "▲" : "▼") : ""}
         </button>
       </div>
       {open && docs.length > 0 && (
-        <div className="ml-[88px] mt-1 space-y-0.5">
+        <div className="ml-[88px] mt-1.5 space-y-1">
           {docs.map((d) => (
-            <div key={d.id} className="flex items-center gap-2 text-xs">
-              <span className={
-                d.freshness === "stale"
-                  ? "text-red-600 dark:text-red-400 font-medium"
-                  : d.freshness === "ageing"
-                  ? "text-orange-500 dark:text-orange-400"
-                  : "text-muted-foreground"
-              }>
-                {d.title}
-              </span>
-              {d.freshness !== "fresh" && (
-                <span className={`inline-flex items-center rounded px-1 py-0 text-[10px] font-medium ${
-                  d.freshness === "stale"
-                    ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                    : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
-                }`}>
-                  {d.freshness.toUpperCase()} ({d.age_days}d)
-                </span>
-              )}
+            <div key={d.id} className="flex items-center gap-2">
+              <span className="text-xs text-white/65">{d.title}</span>
+              <FreshnessBadge freshness={d.freshness} age_days={d.age_days} />
             </div>
           ))}
         </div>
       )}
-    </div>
+    </motion.div>
   )
 }
 
-// ─── Artifacts Panel ──────────────────────────────────────────────────────────
+// ─── Artifacts Tab ────────────────────────────────────────────────────────────
 
-function ArtifactsPanel({ artifacts }: { artifacts: ArtifactOut[] }) {
+function ArtifactsTab({ artifacts }: { artifacts: ArtifactOut[] }) {
   if (artifacts.length === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-        No documents generated yet.
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-white/45">
+        <svg className="h-10 w-10 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+        </svg>
+        <p className="text-sm font-medium">No documents generated yet</p>
       </div>
     )
   }
   return (
-    <div className="flex-1 overflow-y-auto p-5 space-y-3">
-      {artifacts.map((a) => (
-        <div key={a.id} className="rounded-lg border border-border p-4 space-y-1">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-medium truncate">{a.name}</span>
-            <span className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-              a.type === "google_doc"
-                ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
-                : "bg-muted text-muted-foreground"
-            }`}>
-              {a.type === "google_doc" ? "Google Doc" : "HTML"}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
+    <div className="flex-1 overflow-y-auto p-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl mx-auto">
+        {artifacts.map((a) => (
+          <GlassCard key={a.id} className="flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-3">
+              <span className="text-sm font-semibold text-white leading-snug flex-1">{a.name}</span>
+              <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
+                a.type === "google_doc"
+                  ? "bg-[#00DCC8]/15 text-[#00DCC8]"
+                  : "bg-[#F59E0B]/15 text-[#F59E0B]"
+              }`}>
+                {a.type === "google_doc" ? "Google Doc" : "HTML"}
+              </span>
+            </div>
+            <p className="font-mono text-xs text-white/40">
               {new Date(a.created_at).toLocaleString()}
-            </span>
+            </p>
             <a
               href={a.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-blue-600 hover:underline dark:text-blue-400"
+              className="mt-auto"
             >
-              Open Document ↗
+              <BigButton variant="primary" size="sm" className="w-full">
+                Open document ↗
+              </BigButton>
             </a>
-          </div>
-        </div>
-      ))}
+          </GlassCard>
+        ))}
+      </div>
     </div>
   )
 }
 
-// ─── Summary View ─────────────────────────────────────────────────────────────
+// ─── Summary Helpers ──────────────────────────────────────────────────────────
 
 function DecisionBadge({ decision }: { decision: string }) {
   const approved = decision === "approve"
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-      approved
-        ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-        : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ${
+      approved ? "bg-[#22C55E]/15 text-[#22C55E]" : "bg-[#EF4444]/15 text-[#EF4444]"
     }`}>
       {approved ? "Approved" : "Rejected"}
     </span>
@@ -407,65 +279,54 @@ function DecisionBadge({ decision }: { decision: string }) {
 
 function StageSummaryCard({ stage }: { stage: StageSummary }) {
   return (
-    <div className="rounded-lg border border-border overflow-hidden">
-      {/* Stage header */}
-      <div className="flex items-center gap-3 bg-muted/40 px-5 py-3 border-b border-border">
-        <span className="text-xs font-medium text-muted-foreground">STAGE {stage.sequence}</span>
-        <span className="text-sm font-semibold">{stage.name}</span>
+    <GlassCard padding={false} className="overflow-hidden">
+      <div className="flex items-center gap-3 bg-white/5 px-5 py-3 border-b border-white/8">
+        <span className="text-xs font-bold text-white/40 uppercase tracking-widest">Stage {stage.sequence}</span>
+        <span className="text-sm font-semibold text-white">{stage.name}</span>
         {stage.checkpoint_decision && (
           <span className="ml-auto"><DecisionBadge decision={stage.checkpoint_decision} /></span>
         )}
       </div>
-
-      <div className="divide-y divide-border">
-        {/* Task */}
+      <div className="divide-y divide-white/6">
         <div className="px-5 py-4">
-          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Task Description</p>
-          <p className="text-sm whitespace-pre-wrap text-foreground">{stage.description}</p>
+          <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-white/40">Task Description</p>
+          <p className="text-sm whitespace-pre-wrap text-white/85">{stage.description}</p>
         </div>
-
-        {/* Expected output */}
         <div className="px-5 py-4">
-          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Expected Output</p>
-          <p className="text-sm whitespace-pre-wrap text-muted-foreground">{stage.expected_output}</p>
+          <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-white/40">Expected Output</p>
+          <p className="text-sm whitespace-pre-wrap text-white/55">{stage.expected_output}</p>
         </div>
-
-        {/* Agent output */}
         <div className="px-5 py-4">
-          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Agent Output</p>
+          <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-white/40">Agent Output</p>
           {stage.agent_output ? (
-            <p className="text-sm whitespace-pre-wrap text-foreground">{stage.agent_output}</p>
+            <p className="text-sm whitespace-pre-wrap text-white/85">{stage.agent_output}</p>
           ) : (
-            <p className="text-sm italic text-muted-foreground">No output recorded.</p>
+            <p className="text-sm italic text-white/35">No output recorded.</p>
           )}
         </div>
-
-        {/* Checkpoint review */}
         {stage.checkpoint_type && (
-          <div className="px-5 py-4 bg-muted/20">
-            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <div className="px-5 py-4 bg-white/3">
+            <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-white/40">
               Checkpoint — {stage.checkpoint_type.replace(/_/g, " ")}
             </p>
             {stage.checkpoint_decision ? (
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <DecisionBadge decision={stage.checkpoint_decision} />
-                </div>
+                <DecisionBadge decision={stage.checkpoint_decision} />
                 {stage.checkpoint_comment && (
-                  <p className="text-sm text-foreground mt-2 whitespace-pre-wrap">{stage.checkpoint_comment}</p>
+                  <p className="text-sm text-white/75 mt-2 whitespace-pre-wrap">{stage.checkpoint_comment}</p>
                 )}
               </div>
             ) : (
-              <p className="text-sm italic text-muted-foreground">No response recorded.</p>
+              <p className="text-sm italic text-white/35">No response recorded.</p>
             )}
           </div>
         )}
       </div>
-    </div>
+    </GlassCard>
   )
 }
 
-function SummaryView({ summary, status }: { summary: ExecutionSummaryOut; status: string }) {
+function SummaryTab({ summary, status }: { summary: ExecutionSummaryOut; status: string }) {
   const fmt = (iso: string | null) => iso ? new Date(iso).toLocaleString() : "—"
   const duration = summary.started_at && summary.completed_at
     ? Math.round((new Date(summary.completed_at).getTime() - new Date(summary.started_at).getTime()) / 1000)
@@ -473,70 +334,62 @@ function SummaryView({ summary, status }: { summary: ExecutionSummaryOut; status
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-3xl px-6 py-8 space-y-8">
-
-        {/* Overview card */}
-        <div className="rounded-lg border border-border overflow-hidden">
-          <div className="bg-muted/40 px-5 py-3 border-b border-border">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Execution Overview</p>
+      <div className="mx-auto max-w-3xl px-6 py-8 space-y-6">
+        {/* Overview */}
+        <GlassCard padding={false}>
+          <div className="bg-white/5 px-5 py-3 border-b border-white/8">
+            <p className="text-xs font-bold uppercase tracking-widest text-white/40">Execution Overview</p>
           </div>
-          <div className="divide-y divide-border">
-            <div className="px-5 py-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="divide-y divide-white/6">
+            <div className="px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div>
-                <p className="text-xs text-muted-foreground mb-0.5">Status</p>
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                  status === "completed"
-                    ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                    : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                }`}>{status}</span>
+                <p className="text-xs text-white/40 mb-1.5">Status</p>
+                <StatusPill status={status} />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground mb-0.5">Started</p>
-                <p className="text-sm">{fmt(summary.started_at)}</p>
+                <p className="text-xs text-white/40 mb-1.5">Started</p>
+                <p className="text-sm text-white/75">{fmt(summary.started_at)}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground mb-0.5">Completed</p>
-                <p className="text-sm">{fmt(summary.completed_at)}</p>
+                <p className="text-xs text-white/40 mb-1.5">Completed</p>
+                <p className="text-sm text-white/75">{fmt(summary.completed_at)}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground mb-0.5">Duration</p>
-                <p className="text-sm">{duration !== null ? `${duration}s` : "—"}</p>
+                <p className="text-xs text-white/40 mb-1.5">Duration</p>
+                <p className="font-mono text-sm text-white/75">{duration !== null ? `${duration}s` : "—"}</p>
               </div>
             </div>
-
             {summary.error && (
-              <div className="px-5 py-4 bg-destructive/5">
-                <p className="text-xs font-semibold uppercase tracking-wide text-destructive mb-1">Error</p>
-                <p className="text-sm text-destructive">{summary.error}</p>
+              <div className="px-5 py-4 bg-[#EF4444]/5">
+                <p className="text-xs font-bold uppercase tracking-widest text-[#EF4444] mb-1">Error</p>
+                <p className="text-sm text-[#EF4444]/90">{summary.error}</p>
               </div>
             )}
           </div>
-        </div>
+        </GlassCard>
 
         {/* Work item */}
-        <div className="rounded-lg border border-border overflow-hidden">
-          <div className="bg-muted/40 px-5 py-3 border-b border-border">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Work Item</p>
+        <GlassCard padding={false}>
+          <div className="bg-white/5 px-5 py-3 border-b border-white/8">
+            <p className="text-xs font-bold uppercase tracking-widest text-white/40">Work Item</p>
           </div>
-          <div className="divide-y divide-border">
-            <div className="px-5 py-4">
-              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Objective</p>
-              <p className="text-sm text-foreground">{summary.work_item_objective}</p>
-            </div>
-            <div className="px-5 py-4">
-              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Description</p>
-              <p className="text-sm whitespace-pre-wrap text-foreground">{summary.work_item_description}</p>
-            </div>
-            <div className="px-5 py-4">
-              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Expected Outcome</p>
-              <p className="text-sm whitespace-pre-wrap text-foreground">{summary.work_item_expected_outcome}</p>
-            </div>
+          <div className="divide-y divide-white/6">
+            {[
+              { label: "Objective",        value: summary.work_item_objective },
+              { label: "Description",      value: summary.work_item_description },
+              { label: "Expected Outcome", value: summary.work_item_expected_outcome },
+            ].map(({ label, value }) => (
+              <div key={label} className="px-5 py-4">
+                <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-white/40">{label}</p>
+                <p className="text-sm whitespace-pre-wrap text-white/85">{value}</p>
+              </div>
+            ))}
           </div>
-        </div>
+        </GlassCard>
 
         {/* Stages */}
         <div>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <p className="mb-3 text-xs font-bold uppercase tracking-widest text-white/40">
             Stages ({summary.stages.length})
           </p>
           <div className="space-y-4">
@@ -548,17 +401,444 @@ function SummaryView({ summary, status }: { summary: ExecutionSummaryOut; status
 
         {/* Final review */}
         {(summary.final_review_decision || summary.final_review_comment) && (
-          <div className="rounded-lg border border-border overflow-hidden">
-            <div className="bg-muted/40 px-5 py-3 border-b border-border flex items-center gap-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Final Review</p>
+          <GlassCard padding={false}>
+            <div className="bg-white/5 px-5 py-3 border-b border-white/8 flex items-center gap-3">
+              <p className="text-xs font-bold uppercase tracking-widest text-white/40">Final Review</p>
               {summary.final_review_decision && <DecisionBadge decision={summary.final_review_decision} />}
             </div>
             {summary.final_review_comment && (
               <div className="px-5 py-4">
-                <p className="text-sm whitespace-pre-wrap text-foreground">{summary.final_review_comment}</p>
+                <p className="text-sm whitespace-pre-wrap text-white/85">{summary.final_review_comment}</p>
               </div>
             )}
+          </GlassCard>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Conversation Tab ─────────────────────────────────────────────────────────
+
+function ConversationTab({
+  events,
+  executionId,
+  cp,
+  isAssignee,
+  isTerminal,
+  onGoToCheckpoints,
+  prevLength,
+}: {
+  events: EventOut[]
+  executionId: string
+  cp: CheckpointBrief | null
+  isAssignee: boolean
+  isTerminal: boolean
+  onGoToCheckpoints: () => void
+  prevLength: number
+}) {
+  const [composerMode, setComposerMode] = useState<"guide" | "ask">("guide")
+  const [text, setText] = useState("")
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [askResponse, setAskResponse] = useState<string | null>(null)
+  const [error, setError] = useState("")
+  const bottomRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const atBottom = useRef(true)
+
+  // Extract conversation-relevant events
+  const convoEvents = events.filter((ev) =>
+    ["agent.message", "stage_output", "human.message", "executor.response", "agent.summary"].includes(ev.event_type)
+  )
+
+  function handleScroll() {
+    const el = listRef.current
+    if (!el) return
+    atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 50
+  }
+
+  useEffect(() => {
+    if (atBottom.current && bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [convoEvents.length])
+
+  async function handleSend() {
+    if (!text.trim()) return
+    setError("")
+    setSending(true)
+    setAskResponse(null)
+    try {
+      if (composerMode === "guide") {
+        await apiFetch(`/executions/${executionId}/messages`, {
+          method: "POST",
+          body: JSON.stringify({ content: text.trim() }),
+        })
+        setText("")
+        setSent(true)
+        setTimeout(() => setSent(false), 3000)
+      } else {
+        const res = await apiFetch<{ answer: string }>(`/executions/${executionId}/ask`, {
+          method: "POST",
+          body: JSON.stringify({ question: text.trim() }),
+        })
+        setAskResponse(res.answer)
+        setText("")
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to send")
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Messages */}
+      <div
+        ref={listRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 py-5 space-y-4"
+      >
+        {convoEvents.length === 0 && (
+          <p className="text-sm text-white/35 text-center py-8">No messages yet — the agent will appear here.</p>
+        )}
+        {convoEvents.map((ev, i) => {
+          const isNewItem = i >= prevLength
+          const isHuman = ev.event_type === "human.message"
+          const isSummary = ev.event_type === "agent.summary"
+          const isAnswer = ev.event_type === "executor.response"
+          const text = String(ev.payload?.preview ?? ev.payload?.summary ?? "")
+
+          return (
+            <motion.div
+              key={ev.id}
+              initial={isNewItem ? { opacity: 0, y: 8 } : false}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className={`flex ${isHuman ? "justify-end" : "justify-start"}`}
+            >
+              {isSummary ? (
+                <div className="max-w-[85%] w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 space-y-1">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#C45BFF]">Summary so far</p>
+                  <p className="text-sm text-white/80 whitespace-pre-wrap">{text}</p>
+                </div>
+              ) : isHuman ? (
+                <div className="max-w-[75%] rounded-2xl rounded-tr-md bg-gradient-to-br from-[#5B6CFF] to-[#C45BFF] px-4 py-3">
+                  <p className="text-sm text-white whitespace-pre-wrap">{text}</p>
+                </div>
+              ) : isAnswer ? (
+                <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-[#00DCC8]/15 border border-[#00DCC8]/25 px-4 py-3">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#00DCC8] mb-1">Answer</p>
+                  <p className="text-sm text-white/85 whitespace-pre-wrap">{text}</p>
+                </div>
+              ) : (
+                <div className="flex gap-3 max-w-[85%]">
+                  <div className="shrink-0 h-7 w-7 rounded-lg bg-gradient-to-br from-[#5B6CFF] to-[#C45BFF] flex items-center justify-center mt-0.5">
+                    <span className="text-white text-[10px] font-bold">AI</span>
+                  </div>
+                  <div className="rounded-2xl rounded-tl-md bg-white/8 border border-white/10 px-4 py-3">
+                    <p className="text-sm text-white/85 whitespace-pre-wrap">{text}</p>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )
+        })}
+
+        {/* Checkpoint nudge */}
+        {cp && (
+          <div className="flex justify-start">
+            <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-[#FF7AC8]/12 border border-[#FF7AC8]/25 px-4 py-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-[#FF7AC8] animate-pulse" />
+                <p className="text-sm font-semibold text-[#FF7AC8]">Your review is needed</p>
+              </div>
+              <p className="text-xs text-white/60">{cp.instruction}</p>
+              <BigButton variant="ghost" size="sm" onClick={onGoToCheckpoints}>
+                Go to Checkpoint →
+              </BigButton>
+            </div>
           </div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Composer */}
+      {!isTerminal && (
+        <div className="shrink-0 border-t border-white/8 px-4 py-4 bg-[rgba(7,10,20,0.7)] backdrop-blur-md space-y-3">
+          {/* Mode toggle */}
+          <div className="flex items-center gap-1 w-fit rounded-xl bg-white/6 p-1">
+            {(["guide", "ask"] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setComposerMode(mode)}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  composerMode === mode
+                    ? "bg-gradient-to-r from-[#5B6CFF] to-[#C45BFF] text-white"
+                    : "text-white/50 hover:text-white"
+                }`}
+              >
+                {mode === "guide" ? "Guide" : "Ask"}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-white/40">
+            {composerMode === "guide"
+              ? "Leave a note for the agent — injected before the next stage."
+              : "Ask a question about this execution."}
+          </p>
+          <div className="flex gap-2">
+            <textarea
+              className="flex-1 rounded-xl glass px-4 py-3 text-sm text-white placeholder:text-white/30 resize-none focus:outline-none focus:ring-2 focus:ring-[#5B6CFF]/60 transition-all"
+              rows={2}
+              placeholder={composerMode === "guide" ? "e.g. Focus on the error handling path…" : "e.g. What did the agent find?"}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              disabled={sending}
+              onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSend() }}
+            />
+            <BigButton
+              variant="gradient"
+              size="md"
+              loading={sending}
+              disabled={!text.trim()}
+              onClick={handleSend}
+              className="shrink-0 self-end"
+            >
+              Send
+            </BigButton>
+          </div>
+          {error && <p className="text-xs text-[#EF4444]">{error}</p>}
+          {sent && <p className="text-xs text-[#22C55E]">Guidance sent ✓</p>}
+          {askResponse && (
+            <div className="rounded-xl bg-[#00DCC8]/10 border border-[#00DCC8]/20 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#00DCC8] mb-1">Answer</p>
+              <p className="text-sm text-white/85 whitespace-pre-wrap">{askResponse}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Timeline Tab ─────────────────────────────────────────────────────────────
+
+const nodeColor: Record<string, string> = {
+  system: "#00DCC8",
+  agent: "#C45BFF",
+  human: "#FF7AC8",
+}
+
+function TimelineTab({
+  events,
+  isTerminal,
+  prevLength,
+  timelineRef,
+}: {
+  events: EventOut[]
+  isTerminal: boolean
+  prevLength: number
+  timelineRef: React.RefObject<HTMLDivElement | null>
+}) {
+  const [filter, setFilter] = useState<"all" | "agent" | "tool" | "human">("all")
+
+  const filtered = filter === "all" ? events
+    : filter === "tool" ? events.filter((e) => e.event_type.startsWith("tool."))
+    : filter === "agent" ? events.filter((e) => e.actor_type === "agent")
+    : events.filter((e) => e.actor_type === "human")
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Filter bar */}
+      <div className="shrink-0 px-4 py-3 border-b border-white/8 flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-white/40 mr-1">Filter:</span>
+        {(["all", "agent", "tool", "human"] as const).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+              filter === f
+                ? "bg-white/15 text-white"
+                : "text-white/40 hover:text-white hover:bg-white/8"
+            }`}
+          >
+            {f === "all" ? "All" : f === "agent" ? "Reasoning" : f === "tool" ? "Tool calls" : "Human"}
+          </button>
+        ))}
+        <span className="ml-auto text-xs text-white/25 italic">Reasoning is summarised, never raw</span>
+      </div>
+
+      <div ref={timelineRef} className="flex-1 overflow-y-auto px-4 py-4">
+        <div className="relative">
+          {/* Vertical line */}
+          <div className="absolute left-[18px] top-3 bottom-3 w-px bg-white/10" />
+
+          <div className="space-y-0.5">
+            {filtered.length === 0 && (
+              <p className="text-xs text-white/35 pl-10">No events.</p>
+            )}
+            {filtered.map((ev, i) => {
+              const isNew = events.indexOf(ev) >= prevLength
+              const color = nodeColor[ev.actor_type] ?? "#ffffff"
+
+              if (ev.event_type === "knowledge.retrieved") {
+                return <KnowledgeEventRow key={ev.id} ev={ev} isNew={isNew} />
+              }
+
+              return (
+                <motion.div
+                  key={ev.id}
+                  className="flex items-start gap-3 py-1.5"
+                  initial={isNew ? { opacity: 0, x: -6 } : false}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                >
+                  {/* Node */}
+                  <div className="relative z-10 shrink-0 mt-0.5">
+                    <div
+                      className="h-4 w-4 rounded-full border-2 bg-[#070A14]"
+                      style={{ borderColor: color }}
+                    />
+                  </div>
+                  {/* Content */}
+                  <div className="flex items-start gap-2 flex-1 min-w-0">
+                    <span className="font-mono text-xs text-white/30 shrink-0 mt-0.5 w-20 tabular-nums">
+                      {fmtTime(ev.created_at)}
+                    </span>
+                    <span
+                      className="shrink-0 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                      style={{ background: `${color}18`, color }}
+                    >
+                      {ev.actor_type}
+                    </span>
+                    <span className="text-xs text-white/70 leading-relaxed min-w-0 break-words">
+                      {describeEvent(ev)}
+                    </span>
+                  </div>
+                </motion.div>
+              )
+            })}
+          </div>
+
+          {!isTerminal && (
+            <div className="flex items-center gap-2 pl-7 py-2 text-xs text-white/35">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#00DCC8] animate-pulse" />
+              Waiting for updates…
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Checkpoints Tab ──────────────────────────────────────────────────────────
+
+function CheckpointsTab({
+  cp,
+  execution,
+  isAssignee,
+  executionId,
+  policy,
+  onResponse,
+}: {
+  cp: CheckpointBrief | null
+  execution: ExecutionOut
+  isAssignee: boolean
+  executionId: string
+  policy: PolicyOut | null
+  onResponse: (nextAction: string, newStatus: string) => void
+}) {
+  return (
+    <div className="flex-1 overflow-y-auto p-5">
+      <div className="max-w-2xl mx-auto space-y-5">
+        {cp ? (
+          <GlassCard glow="pink" padding={false} className="overflow-hidden">
+            <div className="bg-[#FF7AC8]/10 px-5 py-3 border-b border-[#FF7AC8]/20 flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[#FF7AC8] animate-pulse" />
+              <p className="text-xs font-bold uppercase tracking-widest text-[#FF7AC8]">
+                Waiting for your review
+              </p>
+            </div>
+            <div className="px-5 py-5 space-y-5">
+              <div>
+                <p className="text-sm font-semibold text-white/90 leading-snug">{cp.instruction}</p>
+                <p className="text-xs text-white/45 mt-1 capitalize">{cp.type.replace(/_/g, " ")} checkpoint</p>
+              </div>
+
+              {/* Agent summary */}
+              <div className="rounded-xl bg-white/5 border border-white/8 px-4 py-4 space-y-2">
+                <p className="text-xs font-bold uppercase tracking-widest text-white/35">Agent Summary</p>
+                {execution.pending_summary ? (
+                  <p className="text-sm whitespace-pre-wrap text-white/80">{execution.pending_summary}</p>
+                ) : (
+                  <p className="text-sm italic text-white/35">Summary pending…</p>
+                )}
+              </div>
+
+              {/* Assigned to */}
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-white/40">Assigned to:</p>
+                <p className="font-mono text-xs text-white/70">{cp.assigned_user_id}</p>
+              </div>
+
+              {isAssignee ? (
+                <CheckpointActions
+                  executionId={executionId}
+                  checkpoint={cp}
+                  onResponse={onResponse}
+                />
+              ) : (
+                <p className="text-xs text-white/40 bg-white/5 px-3 py-2 rounded-lg">
+                  You are not the assigned reviewer for this checkpoint.
+                </p>
+              )}
+            </div>
+          </GlassCard>
+        ) : TERMINAL.has(execution.status) ? (
+          <div className="text-center py-12 text-white/40">
+            <p className="text-sm">Execution finished — no pending checkpoints.</p>
+          </div>
+        ) : (
+          <div className="text-center py-12 text-white/40">
+            <p className="text-sm">No checkpoint pending.</p>
+            <p className="text-xs mt-1">Checkpoints will appear here when the agent needs your review.</p>
+          </div>
+        )}
+
+        {/* All checkpoints list from policy */}
+        {policy && policy.checkpoints.length > 0 && (
+          <GlassCard padding={false}>
+            <div className="px-5 py-3 border-b border-white/8">
+              <p className="text-xs font-bold uppercase tracking-widest text-white/35">All Checkpoints</p>
+            </div>
+            <div className="divide-y divide-white/6">
+              {policy.checkpoints.map((chk) => {
+                const stage = policy.stages.find((s) => s.id === chk.stage_id)
+                const isCurrent = cp?.id === chk.id
+                return (
+                  <div key={chk.id} className="flex items-center gap-3 px-5 py-3">
+                    <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+                      isCurrent ? "bg-[#FF7AC8] animate-pulse" : "bg-white/20"
+                    }`} />
+                    <div>
+                      <p className="text-xs font-medium text-white/70">
+                        {stage ? `Stage ${stage.sequence} — ${stage.name}` : chk.instruction}
+                      </p>
+                      <p className="text-[11px] text-white/35 capitalize">{chk.type.replace(/_/g, " ")}</p>
+                    </div>
+                    {isCurrent && (
+                      <span className="ml-auto text-[10px] font-bold uppercase tracking-widest text-[#FF7AC8]">Active</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </GlassCard>
         )}
       </div>
     </div>
@@ -575,20 +855,21 @@ export default function ExecutionWorkspacePage({
   const { executionId } = use(params)
   const { user } = useAuth()
 
-  const [execution, setExecution] = useState<ExecutionOut | null>(null)
-  const [workItem, setWorkItem] = useState<WorkItem | null>(null)
-  const [policy, setPolicy] = useState<PolicyOut | null>(null)
-  const [events, setEvents] = useState<EventOut[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-  const [activeTab, setActiveTab] = useState<"timeline" | "artifacts" | "summary">("timeline")
-  const [summary, setSummary] = useState<ExecutionSummaryOut | null>(null)
+  const [execution, setExecution]         = useState<ExecutionOut | null>(null)
+  const [workItem, setWorkItem]           = useState<WorkItem | null>(null)
+  const [policy, setPolicy]               = useState<PolicyOut | null>(null)
+  const [events, setEvents]               = useState<EventOut[]>([])
+  const [loading, setLoading]             = useState(true)
+  const [error, setError]                 = useState("")
+  const [activeTab, setActiveTab]         = useState<"conversation" | "timeline" | "artifacts" | "checkpoints">("conversation")
+  const [summary, setSummary]             = useState<ExecutionSummaryOut | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
 
-  const lastEventIdRef = useRef<string | null>(null)
-  const timelineRef = useRef<HTMLDivElement>(null)
-  const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const eventPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastEventIdRef  = useRef<string | null>(null)
+  const timelineRef     = useRef<HTMLDivElement>(null)
+  const statusPollRef   = useRef<ReturnType<typeof setInterval> | null>(null)
+  const eventPollRef    = useRef<ReturnType<typeof setInterval> | null>(null)
+  const prevEventsLen   = useRef(0)
 
   // ── Initial load ─────────────────────────────────────────────────────────
 
@@ -602,10 +883,10 @@ export default function ExecutionWorkspacePage({
       ])
       setExecution(exec)
       setEvents(initialEvents)
+      prevEventsLen.current = initialEvents.length
       if (initialEvents.length > 0) {
         lastEventIdRef.current = initialEvents[initialEvents.length - 1].id
       }
-      // Fetch work item for back link
       apiFetch<WorkItem>(`/work-items/${exec.work_item_id}`)
         .then(setWorkItem)
         .catch(() => {})
@@ -616,11 +897,9 @@ export default function ExecutionWorkspacePage({
     }
   }, [executionId])
 
-  useEffect(() => {
-    loadInitial()
-  }, [loadInitial])
+  useEffect(() => { loadInitial() }, [loadInitial])
 
-  // ── Load policy once policy_id is known ──────────────────────────────────
+  // ── Load policy ───────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!execution?.policy_id || policy?.id === execution.policy_id) return
@@ -633,76 +912,48 @@ export default function ExecutionWorkspacePage({
 
   useEffect(() => {
     if (!execution || TERMINAL.has(execution.status)) {
-      if (statusPollRef.current) {
-        clearInterval(statusPollRef.current)
-        statusPollRef.current = null
-      }
+      if (statusPollRef.current) { clearInterval(statusPollRef.current); statusPollRef.current = null }
       return
     }
-
     statusPollRef.current = setInterval(async () => {
       try {
         const updated = await apiFetch<ExecutionOut>(`/executions/${executionId}`)
         setExecution(updated)
-        if (TERMINAL.has(updated.status)) {
-          clearInterval(statusPollRef.current!)
-          statusPollRef.current = null
-        }
-      } catch {
-        // network hiccup — keep polling
-      }
+        if (TERMINAL.has(updated.status)) { clearInterval(statusPollRef.current!); statusPollRef.current = null }
+      } catch { /* keep polling */ }
     }, STATUS_POLL_MS)
-
-    return () => {
-      if (statusPollRef.current) {
-        clearInterval(statusPollRef.current)
-        statusPollRef.current = null
-      }
-    }
+    return () => { if (statusPollRef.current) { clearInterval(statusPollRef.current); statusPollRef.current = null } }
   }, [execution?.id, execution?.status, executionId])
 
   // ── Event polling ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!execution || TERMINAL.has(execution.status)) {
-      // Do one final poll on terminal to catch last events, then stop
       if (execution && TERMINAL.has(execution.status)) {
         const afterParam = lastEventIdRef.current ? `?after=${lastEventIdRef.current}&limit=100` : "?limit=100"
         apiFetch<EventOut[]>(`/executions/${executionId}/events${afterParam}`)
           .then((newEvs) => {
             if (newEvs.length > 0) {
-              setEvents((prev) => [...prev, ...newEvs])
+              setEvents((prev) => { prevEventsLen.current = prev.length; return [...prev, ...newEvs] })
               lastEventIdRef.current = newEvs[newEvs.length - 1].id
             }
           })
           .catch(() => {})
       }
-      if (eventPollRef.current) {
-        clearInterval(eventPollRef.current)
-        eventPollRef.current = null
-      }
+      if (eventPollRef.current) { clearInterval(eventPollRef.current); eventPollRef.current = null }
       return
     }
-
     eventPollRef.current = setInterval(async () => {
       const afterParam = lastEventIdRef.current ? `?after=${lastEventIdRef.current}&limit=100` : "?limit=100"
       try {
         const newEvs = await apiFetch<EventOut[]>(`/executions/${executionId}/events${afterParam}`)
         if (newEvs.length > 0) {
-          setEvents((prev) => [...prev, ...newEvs])
+          setEvents((prev) => { prevEventsLen.current = prev.length; return [...prev, ...newEvs] })
           lastEventIdRef.current = newEvs[newEvs.length - 1].id
         }
-      } catch {
-        // network hiccup — keep polling
-      }
+      } catch { /* keep polling */ }
     }, EVENT_POLL_MS)
-
-    return () => {
-      if (eventPollRef.current) {
-        clearInterval(eventPollRef.current)
-        eventPollRef.current = null
-      }
-    }
+    return () => { if (eventPollRef.current) { clearInterval(eventPollRef.current); eventPollRef.current = null } }
   }, [execution?.id, execution?.status, executionId])
 
   // ── Auto-scroll timeline ──────────────────────────────────────────────────
@@ -713,7 +964,7 @@ export default function ExecutionWorkspacePage({
     }
   }, [events])
 
-  // ── Checkpoint response handler ───────────────────────────────────────────
+  // ── Summary load ──────────────────────────────────────────────────────────
 
   async function loadSummary() {
     if (summaryLoading || summary) return
@@ -721,39 +972,29 @@ export default function ExecutionWorkspacePage({
     try {
       const s = await apiFetch<ExecutionSummaryOut>(`/executions/${executionId}/summary`)
       setSummary(s)
-    } catch {
-      // summary is best-effort; timeline remains available
-    } finally {
-      setSummaryLoading(false)
-    }
+    } catch { /* best-effort */ } finally { setSummaryLoading(false) }
   }
+
+  // ── Checkpoint response ───────────────────────────────────────────────────
 
   function handleCheckpointResponse(nextAction: string, newStatus: string) {
     setExecution((prev) => prev ? { ...prev, status: newStatus, blocking_checkpoint: null } : prev)
-    // Event poll will pick up the new events on next tick
   }
 
   // ─────────────────────────────────────────────────────────────────────────
 
   if (loading) {
-    return (
-      <div className="flex items-center gap-2 px-6 py-10 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Loading…
-      </div>
-    )
+    return <InlineLoader label="Loading execution…" />
   }
 
   if (error || !execution) {
     return (
       <div className="px-6 py-10">
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+        <div className="rounded-xl bg-[#EF4444]/10 border border-[#EF4444]/25 px-4 py-3 text-sm text-[#EF4444]">
           {error || "Execution not found"}
         </div>
         <div className="mt-4">
-          <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-            ← Dashboard
-          </Link>
+          <Link href="/" className="text-sm text-white/50 hover:text-white transition-colors">← Dashboard</Link>
         </div>
       </div>
     )
@@ -762,222 +1003,185 @@ export default function ExecutionWorkspacePage({
   const currentStage = policy?.stages.find((s) => s.id === execution.current_stage_id)
   const totalStages = policy?.stages.length ?? 0
   const cp = execution.blocking_checkpoint
-  const isAssignee =
-    cp !== null &&
-    (user?.id === cp.assigned_user_id || user?.role === "super_admin")
-
+  const isAssignee = cp !== null && (user?.id === cp.assigned_user_id || user?.role === "super_admin")
+  const isTerminal = TERMINAL.has(execution.status)
   const backHref = workItem?.project_id
     ? `/projects/${workItem.project_id}/work-items/${execution.work_item_id}`
     : "/"
 
+  const tabs = [
+    { id: "conversation", label: "Conversation" },
+    { id: "timeline",     label: "Timeline" },
+    { id: "artifacts",    label: "Artifacts" },
+    { id: "checkpoints",  label: "Checkpoints", dot: !!cp, dotColor: "#FF7AC8" },
+    ...(isTerminal ? [{ id: "summary", label: "Summary" }] : []),
+  ]
+
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#070A14]">
+
       {/* Top bar */}
-      <div className="flex items-center justify-between border-b border-border px-5 py-3 shrink-0">
-        <div className="flex items-center gap-4">
-          <Link href={backHref} className="text-sm text-muted-foreground hover:text-foreground">
-            ← {workItem?.name ?? "Work Item"}
-          </Link>
-          <span className="text-sm font-medium">
-            Execution #{execution.execution_number}
-          </span>
-          <StatusBadge status={execution.status} />
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center rounded-md border border-border text-xs overflow-hidden">
-            <button
-              className={`px-3 py-1.5 transition-colors ${activeTab === "timeline" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
-              onClick={() => setActiveTab("timeline")}
-            >
-              Timeline
-            </button>
-            <button
-              className={`px-3 py-1.5 transition-colors ${activeTab === "artifacts" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
-              onClick={() => setActiveTab("artifacts")}
-            >
-              Artifacts
-            </button>
-            {TERMINAL.has(execution.status) && (
-              <button
-                className={`px-3 py-1.5 transition-colors ${activeTab === "summary" ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`}
-                onClick={() => { setActiveTab("summary"); loadSummary() }}
-              >
-                Summary
-              </button>
+      <div className="shrink-0 border-b border-white/8 bg-[rgba(7,10,20,0.9)] backdrop-blur-xl px-5 py-3">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link href={backHref} className="text-sm text-white/45 hover:text-white transition-colors shrink-0">
+              ← {workItem?.name ?? "Work Item"}
+            </Link>
+            <span className="text-white/20">/</span>
+            <span className="font-heading font-semibold text-white text-sm">
+              Execution #{execution.execution_number}
+            </span>
+            <StatusPill status={execution.status} dot />
+            {!isTerminal && (
+              <div className="flex items-center gap-1.5 text-xs text-[#00DCC8]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#00DCC8] animate-pulse" />
+                Live
+              </div>
             )}
           </div>
-          {!TERMINAL.has(execution.status) && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Live
+
+          {/* Stage progress */}
+          {currentStage && (
+            <div className="shrink-0 text-right hidden sm:block">
+              <p className="text-xs text-white/40">
+                Stage {currentStage.sequence}{totalStages > 0 ? ` of ${totalStages}` : ""}
+              </p>
+              <p className="text-xs font-medium text-white/70 max-w-[180px] truncate">{currentStage.name}</p>
             </div>
           )}
         </div>
+
+        {/* Tab bar */}
+        <TabBar
+          tabs={tabs}
+          activeTab={activeTab}
+          onTabChange={(id) => {
+            setActiveTab(id as typeof activeTab)
+            if (id === "summary") loadSummary()
+          }}
+        />
       </div>
 
-      {/* Artifacts tab */}
-      {activeTab === "artifacts" && (
-        <ArtifactsPanel artifacts={execution.artifacts} />
-      )}
+      {/* Left + right 2-col for timeline/conversation; full-width for others */}
+      {(activeTab === "timeline" || activeTab === "conversation") ? (
+        <div className="flex flex-1 overflow-hidden">
+          {/* LEFT sidebar — stage list */}
+          <div className="hidden lg:flex flex-col w-[260px] shrink-0 border-r border-white/8 overflow-y-auto px-4 py-5 gap-4">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-3">Stages</p>
+              {policy?.stages ? (
+                <div className="space-y-1">
+                  {policy.stages.map((s) => {
+                    const isActive = s.id === execution.current_stage_id
+                    const hasCheckpoint = policy.checkpoints.some((c) => c.stage_id === s.id)
+                    return (
+                      <div
+                        key={s.id}
+                        className={`flex items-center gap-2.5 rounded-lg px-3 py-2 transition-colors ${
+                          isActive ? "bg-[#00DCC8]/10 border border-[#00DCC8]/20" : "hover:bg-white/5"
+                        }`}
+                      >
+                        <span className={`text-[11px] font-bold tabular-nums w-5 text-center shrink-0 ${
+                          isActive ? "text-[#00DCC8]" : "text-white/30"
+                        }`}>{s.sequence}</span>
+                        <span className={`text-xs font-medium leading-snug ${isActive ? "text-white" : "text-white/55"}`}>
+                          {s.name}
+                        </span>
+                        {hasCheckpoint && (
+                          <span className="ml-auto h-2 w-2 rounded-sm bg-[#FF7AC8]/60 shrink-0 rotate-45" title="Has checkpoint" />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : execution.status === "queued" ? (
+                <p className="text-xs text-white/35">Waiting to start…</p>
+              ) : (
+                <p className="text-xs text-white/35">Loading stages…</p>
+              )}
+            </div>
 
-      {/* Summary view */}
-      {activeTab === "summary" && TERMINAL.has(execution.status) && (
-        summaryLoading ? (
-          <div className="flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Loading summary…
-          </div>
-        ) : summary ? (
-          <SummaryView summary={summary} status={execution.status} />
-        ) : (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-            Summary unavailable.
-          </div>
-        )
-      )}
-
-      {/* Three-column workspace */}
-      <div className={`grid flex-1 overflow-hidden lg:grid-cols-[280px_1fr_300px] ${activeTab !== "timeline" ? "hidden" : ""}`}>
-
-        {/* LEFT — Stage info */}
-        <div className="flex flex-col gap-4 border-r border-border overflow-y-auto px-4 py-5">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground mb-3">CURRENT STAGE</p>
-            {execution.status === "queued" ? (
-              <p className="text-sm text-muted-foreground">Waiting to start…</p>
-            ) : !currentStage ? (
-              <p className="text-sm text-muted-foreground">
-                {execution.current_stage_id ? "Loading…" : "–"}
-              </p>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-xs text-muted-foreground">
-                  Stage {currentStage.sequence}{totalStages > 0 ? ` of ${totalStages}` : ""}
+            {/* Progress bar */}
+            {totalStages > 0 && currentStage && (
+              <div className="space-y-1.5">
+                <p className="text-[10px] text-white/30">
+                  {currentStage.sequence} / {totalStages} stages
                 </p>
-                <p className="text-sm font-semibold">{currentStage.name}</p>
-                {currentStage.description && (
-                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">
-                    {currentStage.description.length > 200
-                      ? currentStage.description.slice(0, 200) + "…"
-                      : currentStage.description}
+                <div className="h-1 rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-[#00DCC8] to-[#5B6CFF] transition-all"
+                    style={{ width: `${(currentStage.sequence / totalStages) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {execution.status === "failed" && execution.error && (
+              <div className="rounded-xl bg-[#EF4444]/10 border border-[#EF4444]/20 px-3 py-2.5">
+                <p className="text-xs font-bold text-[#EF4444] mb-1">Error</p>
+                <p className="text-xs text-[#EF4444]/80">{execution.error}</p>
+              </div>
+            )}
+
+            {execution.started_at && (
+              <div className="mt-auto pt-4 border-t border-white/8 space-y-0.5">
+                <p className="font-mono text-[11px] text-white/30">
+                  Started {new Date(execution.started_at).toLocaleString()}
+                </p>
+                {execution.completed_at && (
+                  <p className="font-mono text-[11px] text-white/30">
+                    Done {new Date(execution.completed_at).toLocaleString()}
                   </p>
                 )}
               </div>
             )}
           </div>
 
-          {execution.status === "failed" && execution.error && (
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2.5">
-              <p className="text-xs font-medium text-destructive mb-1">Error</p>
-              <p className="text-xs text-destructive">{execution.error}</p>
-            </div>
-          )}
-
-          {execution.started_at && (
-            <div className="mt-auto pt-4 border-t border-border">
-              <p className="text-xs text-muted-foreground">
-                Started {new Date(execution.started_at).toLocaleString()}
-              </p>
-              {execution.completed_at && (
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Completed {new Date(execution.completed_at).toLocaleString()}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* CENTER — Events timeline */}
-        <div className="flex flex-col border-r border-border overflow-hidden">
-          <div className="shrink-0 border-b border-border px-4 py-2.5">
-            <p className="text-xs font-medium text-muted-foreground">
-              EVENTS {events.length > 0 && <span className="font-normal">({events.length})</span>}
-            </p>
-          </div>
-          <div ref={timelineRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-1">
-            {events.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No events yet.</p>
-            ) : (
-              events.map((ev) =>
-                ev.event_type === "knowledge.retrieved" ? (
-                  <KnowledgeEventRow key={ev.id} ev={ev} />
-                ) : (
-                  <div key={ev.id} className="flex items-start gap-2 py-1">
-                    <span className="text-xs tabular-nums text-muted-foreground shrink-0 mt-0.5 w-20">
-                      {fmtTime(ev.created_at)}
-                    </span>
-                    <ActorBadge actor={ev.actor_type} />
-                    <span className="text-xs text-foreground leading-relaxed">
-                      {describeEvent(ev)}
-                    </span>
-                  </div>
-                )
-              )
+          {/* Main content area */}
+          <div className="flex flex-1 flex-col overflow-hidden">
+            {activeTab === "conversation" && (
+              <ConversationTab
+                events={events}
+                executionId={executionId}
+                cp={cp}
+                isAssignee={isAssignee}
+                isTerminal={isTerminal}
+                onGoToCheckpoints={() => setActiveTab("checkpoints")}
+                prevLength={prevEventsLen.current}
+              />
             )}
-            {!TERMINAL.has(execution.status) && (
-              <div className="flex items-center gap-1.5 py-1 text-xs text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Waiting for updates…
-              </div>
+            {activeTab === "timeline" && (
+              <TimelineTab
+                events={events}
+                isTerminal={isTerminal}
+                prevLength={prevEventsLen.current}
+                timelineRef={timelineRef}
+              />
             )}
           </div>
         </div>
-
-        {/* RIGHT — Checkpoint panel */}
-        <div className="overflow-y-auto px-4 py-5">
-          <p className="text-xs font-medium text-muted-foreground mb-3">CHECKPOINT</p>
-
-          {cp ? (
-            <div className="space-y-3">
-              <div className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2.5 dark:border-purple-800/40 dark:bg-purple-900/20">
-                <p className="text-xs font-medium text-purple-800 dark:text-purple-300 mb-1">
-                  ⏸ Waiting for {cp.type.replace(/_/g, " ")}
-                </p>
-                <p className="text-sm text-purple-900 dark:text-purple-200">
-                  {cp.instruction}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-xs text-muted-foreground">Assigned to</p>
-                <p className="text-xs font-mono text-foreground mt-0.5 break-all">
-                  {cp.assigned_user_id}
-                </p>
-              </div>
-
-              {/* Agent summary */}
-              <div className="rounded-md bg-gray-100 dark:bg-gray-800/50 px-3 py-2.5">
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Agent Summary
-                </p>
-                {execution.pending_summary ? (
-                  <p className="text-sm whitespace-pre-wrap">{execution.pending_summary}</p>
-                ) : (
-                  <p className="text-sm italic text-muted-foreground">Summary pending…</p>
-                )}
-              </div>
-
-              {isAssignee ? (
-                <CheckpointActions
-                  executionId={executionId}
-                  checkpoint={cp}
-                  onResponse={handleCheckpointResponse}
-                />
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  You are not the assigned reviewer.
-                </p>
-              )}
-            </div>
-          ) : TERMINAL.has(execution.status) ? null : (
-            <p className="text-xs text-muted-foreground">No checkpoint pending.</p>
-          )}
-
-          {!TERMINAL.has(execution.status) && (
-            <GuidanceInput executionId={executionId} />
-          )}
-        </div>
-      </div>
+      ) : activeTab === "artifacts" ? (
+        <ArtifactsTab artifacts={execution.artifacts} />
+      ) : activeTab === "checkpoints" ? (
+        <CheckpointsTab
+          cp={cp}
+          execution={execution}
+          isAssignee={isAssignee}
+          executionId={executionId}
+          policy={policy}
+          onResponse={handleCheckpointResponse}
+        />
+      ) : activeTab === "summary" && isTerminal ? (
+        summaryLoading ? (
+          <InlineLoader label="Loading summary…" />
+        ) : summary ? (
+          <SummaryTab summary={summary} status={execution.status} />
+        ) : (
+          <div className="flex flex-1 items-center justify-center text-sm text-white/40">
+            Summary unavailable.
+          </div>
+        )
+      ) : null}
     </div>
   )
 }

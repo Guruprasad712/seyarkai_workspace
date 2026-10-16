@@ -5,31 +5,18 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ChevronDown, ChevronRight, Loader2, Plus, Trash2 } from "lucide-react"
 import { apiFetch, ApiError, extractPublishFailures } from "@/lib/api"
-import { Button } from "@/components/ui/button"
+import { StatusPill } from "@/components/status-pill"
+import { BigButton } from "@/components/big-button"
+import { GlassCard } from "@/components/glass-card"
 import type { Agent, AgentVersion, Capability, McpTool, PublishFailure } from "@/lib/types"
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const inputCls =
-  "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:opacity-50"
-
-const statusColors: Record<string, string> = {
-  draft: "bg-muted text-muted-foreground",
-  published: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  retired: "bg-muted/60 text-muted-foreground line-through",
-  active: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  inactive: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-}
+  "w-full rounded-xl glass px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:ring-2 focus:ring-[#5B6CFF]/60 disabled:opacity-50 transition-all"
 
 function Badge({ status }: { status: string }) {
-  const cls = statusColors[status] ?? "bg-muted text-muted-foreground"
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}
-    >
-      {status}
-    </span>
-  )
+  return <StatusPill status={status} />
 }
 
 function Field({
@@ -130,7 +117,7 @@ function VersionForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-border p-4">
+    <form onSubmit={handleSubmit} className="space-y-4 rounded-xl glass p-4">
       <Field label="Instructions">
         <textarea
           className={inputCls + " min-h-[100px] resize-y font-mono text-xs"}
@@ -142,11 +129,15 @@ function VersionForm({
 
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <label className="text-sm font-medium">Capabilities</label>
-          <Button type="button" variant="ghost" size="xs" onClick={addCap}>
-            <Plus className="mr-1 h-3 w-3" />
+          <label className="text-sm font-medium text-white/80">Capabilities</label>
+          <button
+            type="button"
+            onClick={addCap}
+            className="flex items-center gap-1 text-xs text-[#5B6CFF] hover:text-[#C45BFF] transition-colors"
+          >
+            <Plus className="h-3 w-3" />
             Add
-          </Button>
+          </button>
         </div>
         <div className="space-y-2">
           {capabilities.map((cap, idx) => (
@@ -165,9 +156,13 @@ function VersionForm({
                 onChange={(e) => updateCap(idx, "description", e.target.value)}
               />
               {capabilities.length > 1 && (
-                <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeCap(idx)}>
+                <button
+                  type="button"
+                  onClick={() => removeCap(idx)}
+                  className="p-1.5 rounded-lg text-white/30 hover:text-[#EF4444] hover:bg-[#EF4444]/10 transition-colors"
+                >
                   <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                </button>
               )}
             </div>
           ))}
@@ -204,12 +199,12 @@ function VersionForm({
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={submitting}>
+        <BigButton type="submit" variant="gradient" size="md" loading={submitting} disabled={submitting}>
           {submitting ? "Saving…" : versionId ? "Save changes" : "Add version"}
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+        </BigButton>
+        <BigButton type="button" variant="ghost" size="md" onClick={onCancel}>
           Cancel
-        </Button>
+        </BigButton>
       </div>
     </form>
   )
@@ -265,55 +260,38 @@ function VersionRow({ version, agentId, allTools, onRefresh }: VersionRowProps) 
   }
 
   return (
-    <div className="rounded-lg border border-border">
-      {/* Header row */}
-      <div className="flex items-center gap-3 px-4 py-3">
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="flex items-center gap-1.5 text-sm font-medium hover:text-foreground"
-        >
-          {expanded ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          )}
-          v{version.version}
-        </button>
+    <div className="rounded-xl glass overflow-hidden">
+      {/* Header row — entire row is clickable to expand */}
+      <div
+        className="flex items-center gap-3 px-4 py-4 flex-wrap cursor-pointer select-none hover:bg-white/5 active:bg-white/8 transition-colors duration-150"
+        onClick={() => !editing && setExpanded((v) => !v)}
+      >
+        {expanded ? (
+          <ChevronDown className="h-4 w-4 text-white/40 shrink-0 transition-transform duration-200" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-white/40 shrink-0 transition-transform duration-200" />
+        )}
+        <span className="text-sm font-bold text-white">v{version.version}</span>
         <Badge status={version.status} />
         {version.published_at && (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-white/35 font-mono">
             {new Date(version.published_at).toLocaleDateString()}
           </span>
         )}
         {toolNames && (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-white/35">
             Tools: {toolNames}
           </span>
         )}
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex gap-2" onClick={(e) => e.stopPropagation()}>
           {version.status === "draft" && !editing && (
             <>
-              <Button
-                type="button"
-                variant="outline"
-                size="xs"
-                onClick={() => setEditing(true)}
-              >
+              <BigButton type="button" variant="ghost" size="sm" onClick={() => setEditing(true)}>
                 Edit
-              </Button>
-              <Button
-                type="button"
-                size="xs"
-                disabled={publishing}
-                onClick={handlePublish}
-              >
-                {publishing ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  "Publish"
-                )}
-              </Button>
+              </BigButton>
+              <BigButton type="button" variant="gradient" size="sm" disabled={publishing} loading={publishing} onClick={handlePublish}>
+                {publishing ? "" : "Publish"}
+              </BigButton>
             </>
           )}
         </div>
@@ -321,13 +299,13 @@ function VersionRow({ version, agentId, allTools, onRefresh }: VersionRowProps) 
 
       {/* Publish failures */}
       {publishFailures.length > 0 && (
-        <div className="mx-4 mb-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2">
-          <p className="mb-1 text-xs font-medium text-destructive">
+        <div className="mx-4 mb-3 rounded-xl bg-[#EF4444]/10 border border-[#EF4444]/25 px-3 py-2">
+          <p className="mb-1 text-xs font-medium text-[#EF4444]">
             Publish validation failed
           </p>
           <ul className="space-y-0.5">
             {publishFailures.map((f) => (
-              <li key={f.code} className="text-xs text-destructive">
+              <li key={f.code} className="text-xs text-[#EF4444]">
                 <span className="font-medium">{failureLabels[f.code] ?? f.code}:</span>{" "}
                 {f.message}
               </li>
@@ -338,18 +316,18 @@ function VersionRow({ version, agentId, allTools, onRefresh }: VersionRowProps) 
 
       {/* Instructions expand */}
       {expanded && !editing && (
-        <div className="border-t border-border px-4 py-3">
-          <p className="mb-1 text-xs font-medium text-muted-foreground">Instructions</p>
-          <pre className="whitespace-pre-wrap font-mono text-xs text-foreground">
+        <div className="border-t border-white/10 px-4 py-3">
+          <p className="mb-1 text-xs font-medium text-white/40 uppercase tracking-widest">Instructions</p>
+          <pre className="whitespace-pre-wrap font-mono text-xs text-white/70">
             {version.instructions}
           </pre>
           {version.capabilities.length > 0 && (
             <>
-              <p className="mb-1 mt-3 text-xs font-medium text-muted-foreground">Capabilities</p>
+              <p className="mb-1 mt-3 text-xs font-medium text-white/40 uppercase tracking-widest">Capabilities</p>
               <ul className="space-y-1">
                 {version.capabilities.map((c, i) => (
-                  <li key={i} className="text-xs">
-                    <span className="font-medium">{c.name}</span>
+                  <li key={i} className="text-xs text-white/70">
+                    <span className="font-medium text-white/90">{c.name}</span>
                     {c.description ? ` — ${c.description}` : ""}
                   </li>
                 ))}
@@ -361,7 +339,7 @@ function VersionRow({ version, agentId, allTools, onRefresh }: VersionRowProps) 
 
       {/* Inline edit form */}
       {editing && (
-        <div className="border-t border-border p-4">
+        <div className="border-t border-white/10 p-4">
           <VersionForm
             agentId={agentId}
             versionId={version.id}
@@ -418,10 +396,12 @@ export default function AgentDetailPage({
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-10">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading…
+      <div className="min-h-screen bg-[#070A14]">
+        <div className="mx-auto max-w-3xl px-4 py-10">
+          <div className="flex items-center gap-2 text-sm text-white/40">
+            <Loader2 className="h-4 w-4 animate-spin text-[#5B6CFF]" />
+            Loading…
+          </div>
         </div>
       </div>
     )
@@ -429,13 +409,15 @@ export default function AgentDetailPage({
 
   if (error || !agent) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-10">
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error || "Agent not found"}
+      <div className="min-h-screen bg-[#070A14]">
+        <div className="mx-auto max-w-3xl px-4 py-10">
+          <div className="rounded-xl bg-[#EF4444]/10 border border-[#EF4444]/25 px-4 py-3 text-sm text-[#EF4444]">
+            {error || "Agent not found"}
+          </div>
+          <BigButton className="mt-4" variant="ghost" size="md" onClick={() => router.push("/agents")}>
+            ← Back to agents
+          </BigButton>
         </div>
-        <Button className="mt-4" variant="outline" onClick={() => router.push("/agents")}>
-          ← Back to agents
-        </Button>
       </div>
     )
   }
@@ -444,55 +426,56 @@ export default function AgentDetailPage({
   const hasDraft = agent.versions.some((v) => v.status === "draft")
 
   return (
+    <div className="min-h-screen bg-[#070A14]">
     <div className="mx-auto max-w-3xl px-4 py-10">
       {/* Back */}
       <div className="mb-6">
         <Link
           href="/agents"
-          className="text-sm text-muted-foreground hover:text-foreground"
+          className="text-sm text-white/45 hover:text-white transition-colors"
         >
           ← Agent Library
         </Link>
       </div>
 
       {/* Agent header */}
-      <div className="mb-8">
+      <GlassCard className="mb-8" style={{ background: "rgba(0,220,200,0.05)" } as React.CSSProperties}>
         <div className="flex items-start gap-3">
           <div className="flex-1">
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-semibold">{agent.name}</h1>
+              <h1 className="font-heading text-3xl font-black text-white">{agent.name}</h1>
               <Badge status={agent.status} />
             </div>
-            <p className="mt-0.5 font-mono text-xs text-muted-foreground">
+            <p className="mt-0.5 font-mono text-xs text-[#00DCC8]/70">
               {agent.agent_code}
             </p>
           </div>
         </div>
         {agent.description && (
-          <p className="mt-3 text-sm text-muted-foreground">{agent.description}</p>
+          <p className="mt-3 text-sm text-white/55">{agent.description}</p>
         )}
         {agent.role_purpose && (
-          <p className="mt-1 text-sm">
-            <span className="text-muted-foreground">Role:</span> {agent.role_purpose}
+          <p className="mt-1 text-sm text-white/70">
+            <span className="text-white/35">Role:</span> {agent.role_purpose}
           </p>
         )}
-      </div>
+      </GlassCard>
 
       {/* Versions */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-medium">Versions</h2>
+          <h2 className="font-heading text-xl font-bold text-white">Versions</h2>
           {!hasDraft && (
-            <Button
+            <BigButton
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => setAddingVersion(true)}
               disabled={addingVersion}
             >
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               Add version
-            </Button>
+            </BigButton>
           )}
         </div>
 
@@ -526,6 +509,7 @@ export default function AgentDetailPage({
             />
           ))}
       </div>
+    </div>
     </div>
   )
 }

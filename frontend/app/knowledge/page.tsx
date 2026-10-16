@@ -1,54 +1,25 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { CheckCircle, Clock, AlertTriangle, Plus, RefreshCw } from "lucide-react"
 import { apiFetch, ApiError } from "@/lib/api"
-import { Button } from "@/components/ui/button"
+import { GlassCard } from "@/components/glass-card"
+import { BigButton } from "@/components/big-button"
+import { FreshnessBadge } from "@/components/freshness-badge"
+import { InlineLoader } from "@/components/loader"
 import type { KnowledgeDocument } from "@/lib/types"
-
-// ─── Freshness helpers ────────────────────────────────────────────────────────
-
-const freshnessConfig = {
-  fresh: {
-    label: "Fresh",
-    icon: CheckCircle,
-    cls: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-    iconCls: "text-green-500",
-  },
-  ageing: {
-    label: "Ageing",
-    icon: Clock,
-    cls: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-    iconCls: "text-yellow-500",
-  },
-  stale: {
-    label: "Stale",
-    icon: AlertTriangle,
-    cls: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-    iconCls: "text-red-500",
-  },
-}
-
-function FreshnessBadge({ freshness }: { freshness: KnowledgeDocument["freshness"] }) {
-  const cfg = freshnessConfig[freshness]
-  const Icon = cfg.icon
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${cfg.cls}`}>
-      <Icon className={`h-3 w-3 ${cfg.iconCls}`} />
-      {cfg.label}
-    </span>
-  )
-}
 
 // ─── Add document form ────────────────────────────────────────────────────────
 
+const inputCls =
+  "w-full rounded-xl glass px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:ring-2 focus:ring-[#5B6CFF]/60 disabled:opacity-50 transition-all"
+
 function AddDocForm({ onAdded }: { onAdded: (doc: KnowledgeDocument) => void }) {
-  const [open, setOpen] = useState(false)
-  const [title, setTitle] = useState("")
-  const [source, setSource] = useState("")
+  const [open, setOpen]       = useState(false)
+  const [title, setTitle]     = useState("")
+  const [source, setSource]   = useState("")
   const [content, setContent] = useState("")
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState("")
+  const [saving, setSaving]   = useState(false)
+  const [error, setError]     = useState("")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -60,10 +31,7 @@ function AddDocForm({ onAdded }: { onAdded: (doc: KnowledgeDocument) => void }) 
         body: JSON.stringify({ title, source, content }),
       })
       onAdded(doc)
-      setTitle("")
-      setSource("")
-      setContent("")
-      setOpen(false)
+      setTitle(""); setSource(""); setContent(""); setOpen(false)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to add document")
     } finally {
@@ -73,90 +41,51 @@ function AddDocForm({ onAdded }: { onAdded: (doc: KnowledgeDocument) => void }) 
 
   if (!open) {
     return (
-      <Button onClick={() => setOpen(true)}>
-        <Plus className="mr-1.5 h-4 w-4" />
-        Add Document
-      </Button>
+      <BigButton variant="gradient" size="md" onClick={() => setOpen(true)}>
+        + Add Document
+      </BigButton>
     )
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="rounded-lg border border-border bg-card p-4 space-y-3"
-    >
-      <h3 className="font-medium text-sm">New Knowledge Document</h3>
-
-      {error && (
-        <p className="text-xs text-destructive">{error}</p>
-      )}
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">Title</label>
-          <input
-            className="w-full rounded border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="Document title"
-            required
-          />
+    <GlassCard>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <h3 className="font-heading text-lg font-bold text-white">New Knowledge Document</h3>
+        {error && <p className="text-xs text-[#EF4444]">{error}</p>}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-white/70">Title</label>
+            <input className={inputCls} value={title} onChange={e => setTitle(e.target.value)} placeholder="Document title" required />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-white/70">Source</label>
+            <input className={inputCls} value={source} onChange={e => setSource(e.target.value)} placeholder="URL or reference" required />
+          </div>
         </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">Source</label>
-          <input
-            className="w-full rounded border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            value={source}
-            onChange={e => setSource(e.target.value)}
-            placeholder="URL or reference"
-            required
-          />
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-white/70">Content</label>
+          <textarea className={inputCls + " min-h-[100px] resize-y"} rows={4} value={content} onChange={e => setContent(e.target.value)} placeholder="Document content…" required />
         </div>
-      </div>
-
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">Content</label>
-        <textarea
-          className="w-full rounded border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          rows={4}
-          value={content}
-          onChange={e => setContent(e.target.value)}
-          placeholder="Document content…"
-          required
-        />
-      </div>
-
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={() => setOpen(false)}>
-          Cancel
-        </Button>
-        <Button type="submit" size="sm" disabled={saving}>
-          {saving ? "Adding…" : "Add"}
-        </Button>
-      </div>
-    </form>
+        <div className="flex justify-end gap-2">
+          <BigButton type="button" variant="ghost" size="md" onClick={() => setOpen(false)}>Cancel</BigButton>
+          <BigButton type="submit" variant="gradient" size="md" loading={saving}>Add</BigButton>
+        </div>
+      </form>
+    </GlassCard>
   )
 }
 
-// ─── Document row ─────────────────────────────────────────────────────────────
+// ─── Document card ────────────────────────────────────────────────────────────
 
-function DocRow({
-  doc,
-  onVerified,
-}: {
-  doc: KnowledgeDocument
-  onVerified: (updated: KnowledgeDocument) => void
-}) {
+function DocCard({ doc, onVerified }: { doc: KnowledgeDocument; onVerified: (updated: KnowledgeDocument) => void }) {
   const [verifying, setVerifying] = useState(false)
-  const [error, setError] = useState("")
+  const [error, setError]         = useState("")
 
   async function handleVerify() {
     setError("")
     setVerifying(true)
     try {
-      const updated = await apiFetch<KnowledgeDocument>(`/knowledge/${doc.id}/verify`, {
-        method: "POST",
-      })
+      const updated = await apiFetch<KnowledgeDocument>(`/knowledge/${doc.id}/verify`, { method: "POST" })
       onVerified(updated)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Verify failed")
@@ -165,42 +94,37 @@ function DocRow({
     }
   }
 
+  const isStale = doc.freshness === "stale"
+
   return (
-    <tr className="border-t border-border hover:bg-muted/30 transition-colors">
-      <td className="px-4 py-3">
-        <p className="font-medium text-sm">{doc.title}</p>
-        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{doc.content}</p>
-      </td>
-      <td className="px-4 py-3 text-xs text-muted-foreground max-w-[180px]">
-        <span className="truncate block" title={doc.source}>{doc.source}</span>
-      </td>
-      <td className="px-4 py-3">
-        <FreshnessBadge freshness={doc.freshness} />
-        <p className="text-xs text-muted-foreground mt-1">{doc.age_days}d ago</p>
-      </td>
-      <td className="px-4 py-3 text-right">
-        {error && <p className="text-xs text-destructive mb-1">{error}</p>}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleVerify}
-          disabled={verifying}
-          className="text-xs"
-        >
-          <RefreshCw className={`mr-1 h-3 w-3 ${verifying ? "animate-spin" : ""}`} />
+    <GlassCard glow={isStale ? "pink" : "none"} className="flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="font-heading text-base font-bold text-white leading-snug">{doc.title}</p>
+          <p className="text-xs text-white/35 mt-0.5 truncate">{doc.source}</p>
+        </div>
+        <FreshnessBadge freshness={doc.freshness} age_days={doc.age_days} />
+      </div>
+
+      <p className="text-sm text-white/50 line-clamp-2">{doc.content}</p>
+
+      <div className="flex items-center justify-between mt-auto">
+        <span className="font-mono text-xs text-white/25">{doc.age_days}d ago</span>
+        {error && <p className="text-xs text-[#EF4444]">{error}</p>}
+        <BigButton variant={isStale ? "gradient" : "ghost"} size="sm" loading={verifying} onClick={handleVerify}>
           {verifying ? "Verifying…" : "Verify"}
-        </Button>
-      </td>
-    </tr>
+        </BigButton>
+      </div>
+    </GlassCard>
   )
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function KnowledgePage() {
-  const [docs, setDocs] = useState<KnowledgeDocument[]>([])
+  const [docs, setDocs]     = useState<KnowledgeDocument[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
+  const [error, setError]   = useState("")
 
   useEffect(() => {
     apiFetch<KnowledgeDocument[]>("/knowledge")
@@ -209,78 +133,59 @@ export default function KnowledgePage() {
       .finally(() => setLoading(false))
   }, [])
 
-  function handleAdded(doc: KnowledgeDocument) {
-    setDocs(prev => [doc, ...prev])
-  }
-
-  function handleVerified(updated: KnowledgeDocument) {
-    setDocs(prev => prev.map(d => d.id === updated.id ? updated : d))
-  }
-
-  const freshCount = docs.filter(d => d.freshness === "fresh").length
+  const freshCount  = docs.filter(d => d.freshness === "fresh").length
   const ageingCount = docs.filter(d => d.freshness === "ageing").length
-  const staleCount = docs.filter(d => d.freshness === "stale").length
+  const staleCount  = docs.filter(d => d.freshness === "stale").length
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <div className="mb-6 flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Company Brain</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Knowledge documents injected into agent stage tasks.
-          </p>
+    <div className="min-h-screen bg-[#070A14]">
+      <div className="mx-auto max-w-6xl px-4 py-10">
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="font-heading text-4xl font-black text-white">Company Brain</h1>
+            <p className="mt-1.5 text-white/50">Knowledge documents injected into agent stage tasks.</p>
+          </div>
+          <AddDocForm onAdded={(doc) => setDocs(prev => [doc, ...prev])} />
         </div>
-        <AddDocForm onAdded={handleAdded} />
+
+        {/* Freshness summary */}
+        {!loading && !error && docs.length > 0 && (
+          <div className="mb-6 flex gap-3">
+            {[
+              { label: "Fresh",   count: freshCount,  color: "#22C55E" },
+              { label: "Ageing",  count: ageingCount, color: "#F59E0B" },
+              { label: "Stale",   count: staleCount,  color: "#EF4444" },
+            ].map(({ label, count, color }) => (
+              <div key={label} className="glass rounded-xl px-5 py-3 text-center min-w-[80px]">
+                <p className="text-2xl font-black" style={{ color }}>{count}</p>
+                <p className="text-xs text-white/40 mt-0.5">{label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {loading && <InlineLoader label="Loading knowledge base…" />}
+
+        {error && (
+          <div className="rounded-xl bg-[#EF4444]/10 border border-[#EF4444]/25 px-4 py-3 text-sm text-[#EF4444]">
+            {error}
+          </div>
+        )}
+
+        {!loading && !error && docs.length === 0 && (
+          <GlassCard className="text-center py-12">
+            <p className="text-white/40">No documents yet. Add one to get started.</p>
+          </GlassCard>
+        )}
+
+        {!loading && !error && docs.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {docs.map(doc => (
+              <DocCard key={doc.id} doc={doc} onVerified={(updated) => setDocs(prev => prev.map(d => d.id === updated.id ? updated : d))} />
+            ))}
+          </div>
+        )}
       </div>
-
-      {!loading && !error && docs.length > 0 && (
-        <div className="mb-6 flex gap-4">
-          {[
-            { label: "Fresh", count: freshCount, cls: "text-green-600 dark:text-green-400" },
-            { label: "Ageing", count: ageingCount, cls: "text-yellow-600 dark:text-yellow-400" },
-            { label: "Stale", count: staleCount, cls: "text-red-600 dark:text-red-400" },
-          ].map(({ label, count, cls }) => (
-            <div key={label} className="rounded-lg border border-border bg-card px-4 py-3 text-center min-w-[80px]">
-              <p className={`text-xl font-semibold ${cls}`}>{count}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
-
-      {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && docs.length === 0 && (
-        <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
-          <p className="text-sm text-muted-foreground">No documents yet. Add one to get started.</p>
-        </div>
-      )}
-
-      {!loading && !error && docs.length > 0 && (
-        <div className="overflow-hidden rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Document</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Source</th>
-                <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Freshness</th>
-                <th className="px-4 py-2.5 text-right text-xs font-medium text-muted-foreground">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {docs.map(doc => (
-                <DocRow key={doc.id} doc={doc} onVerified={handleVerified} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   )
 }

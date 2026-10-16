@@ -2,27 +2,15 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Plus } from "lucide-react"
 import { apiFetch, ApiError } from "@/lib/api"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { GlassCard } from "@/components/glass-card"
+import { BigButton } from "@/components/big-button"
+import { StatusPill } from "@/components/status-pill"
+import { InlineLoader } from "@/components/loader"
 import type { Project } from "@/lib/types"
 
 const inputCls =
-  "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:opacity-50"
-
-const projectStatusColors: Record<string, string> = {
-  active: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  inactive: "bg-muted text-muted-foreground",
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const cls = projectStatusColors[status] ?? "bg-muted text-muted-foreground"
-  return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>
-      {status}
-    </span>
-  )
-}
+  "w-full rounded-xl glass px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:ring-2 focus:ring-[#5B6CFF]/60 disabled:opacity-50 transition-all"
 
 function CreateProjectForm({
   onCreated,
@@ -31,11 +19,11 @@ function CreateProjectForm({
   onCreated: () => void
   onCancel: () => void
 }) {
-  const [name, setName] = useState("")
+  const [name, setName]               = useState("")
   const [description, setDescription] = useState("")
-  const [submitting, setSubmitting] = useState(false)
-  const [nameError, setNameError] = useState("")
-  const [error, setError] = useState("")
+  const [submitting, setSubmitting]   = useState(false)
+  const [nameError, setNameError]     = useState("")
+  const [error, setError]             = useState("")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -60,54 +48,55 @@ function CreateProjectForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="mb-6 space-y-4 rounded-lg border border-border p-4"
-    >
-      <h2 className="text-sm font-medium">New Project</h2>
+    <GlassCard className="mb-6">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <h2 className="font-heading text-lg font-bold text-white">New Project</h2>
 
-      <div className="space-y-1">
-        <label className="text-sm font-medium">Name</label>
-        <input
-          className={inputCls}
-          required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Q4 Engineering Review"
-        />
-        {nameError && <p className="text-xs text-destructive">{nameError}</p>}
-      </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-white/80">Name</label>
+          <input
+            className={inputCls}
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Q4 Engineering Review"
+          />
+          {nameError && <p className="text-xs text-[#EF4444]">{nameError}</p>}
+        </div>
 
-      <div className="space-y-1">
-        <label className="text-sm font-medium">Description</label>
-        <textarea
-          className={inputCls + " min-h-[80px] resize-y"}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Optional"
-        />
-      </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-white/80">Description</label>
+          <textarea
+            className={inputCls + " min-h-[80px] resize-y"}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Optional"
+          />
+        </div>
 
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
+        {error && (
+          <p className="text-sm text-[#EF4444] bg-[#EF4444]/10 px-3 py-2 rounded-lg border border-[#EF4444]/25">
+            {error}
+          </p>
+        )}
 
-      <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={submitting}>
-          {submitting ? "Creating…" : "Create project"}
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </form>
+        <div className="flex gap-2">
+          <BigButton type="submit" variant="gradient" size="md" loading={submitting}>
+            Create project
+          </BigButton>
+          <BigButton type="button" variant="ghost" size="md" onClick={onCancel}>
+            Cancel
+          </BigButton>
+        </div>
+      </form>
+    </GlassCard>
   )
 }
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
+  const [projects, setProjects]   = useState<Project[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState("")
   const [showCreate, setShowCreate] = useState(false)
 
   function load() {
@@ -121,110 +110,90 @@ export default function ProjectsPage() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => {
-    load()
-  }, [])
+  useEffect(() => { load() }, [])
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Projects</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage AI-assisted work items and policy execution.
-          </p>
+    <div className="min-h-screen bg-[#070A14]">
+      <div className="mx-auto max-w-6xl px-4 py-10">
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="font-heading text-4xl font-black text-white">Projects</h1>
+            <p className="mt-1.5 text-white/50">
+              Manage AI-assisted work items and policy execution.
+            </p>
+          </div>
+          {!showCreate && (
+            <BigButton variant="gradient" size="md" onClick={() => setShowCreate(true)}>
+              + New Project
+            </BigButton>
+          )}
         </div>
-        {!showCreate && (
-          <Button onClick={() => setShowCreate(true)}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            New Project
-          </Button>
+
+        {showCreate && (
+          <CreateProjectForm
+            onCreated={() => { setShowCreate(false); load() }}
+            onCancel={() => setShowCreate(false)}
+          />
+        )}
+
+        {loading && <InlineLoader label="Loading projects…" />}
+
+        {error && (
+          <div className="rounded-xl bg-[#EF4444]/10 border border-[#EF4444]/25 px-4 py-3 text-sm text-[#EF4444]">
+            {error}
+          </div>
+        )}
+
+        {!loading && !error && projects.length === 0 && (
+          <GlassCard className="text-center py-12">
+            <p className="text-white/45 mb-4">No projects yet.</p>
+            <BigButton variant="ghost" size="md" onClick={() => setShowCreate(true)}>
+              Create your first project
+            </BigButton>
+          </GlassCard>
+        )}
+
+        {!loading && !error && projects.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {projects.map((project) => (
+              <Link key={project.id} href={`/projects/${project.id}`} className="group block">
+                <GlassCard className="flex flex-col gap-4 h-full transition-all duration-200 group-hover:bg-white/10 group-hover:border-[#5B6CFF]/40 group-hover:shadow-[0_0_24px_rgba(91,108,255,0.15)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <h2 className="font-heading text-xl font-black text-white leading-snug group-hover:text-white transition-colors">{project.name}</h2>
+                    <StatusPill status={project.status} />
+                  </div>
+                  {project.description ? (
+                    <p className="text-sm text-white/60 flex-1">
+                      {project.description.length > 90 ? project.description.slice(0, 90) + "…" : project.description}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-white/25 italic flex-1">No description</p>
+                  )}
+                  <div className="flex items-center justify-between text-xs text-white/40">
+                    <span>{project.work_item_count ?? 0} work item{(project.work_item_count ?? 0) !== 1 ? "s" : ""}</span>
+                    <span className="font-mono">{new Date(project.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <div className="mt-auto">
+                    <div className="w-full flex items-center justify-between rounded-2xl bg-gradient-to-r from-[#5B6CFF] to-[#C45BFF] px-5 py-3 transition-all duration-200 group-hover:opacity-95 group-hover:shadow-[0_0_20px_rgba(91,108,255,0.4)]">
+                      <span className="text-[17px] font-black text-white tracking-tight">Enter →</span>
+                      <span className="text-white/70 text-sm">Open workspace</span>
+                    </div>
+                  </div>
+                </GlassCard>
+              </Link>
+            ))}
+
+            {/* Dashed placeholder */}
+            <div
+              className="flex flex-col items-center justify-center rounded-[var(--radius-xl)] border-2 border-dashed border-white/15 px-6 py-10 cursor-pointer hover:border-white/30 hover:bg-white/3 transition-all duration-200 min-h-[200px]"
+              onClick={() => setShowCreate(true)}
+            >
+              <span className="text-3xl text-white/20 mb-2">+</span>
+              <p className="text-sm text-white/35 font-medium">New project</p>
+            </div>
+          </div>
         )}
       </div>
-
-      {showCreate && (
-        <CreateProjectForm
-          onCreated={() => {
-            setShowCreate(false)
-            load()
-          }}
-          onCancel={() => setShowCreate(false)}
-        />
-      )}
-
-      {loading && (
-        <div className="text-sm text-muted-foreground">Loading…</div>
-      )}
-
-      {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && projects.length === 0 && (
-        <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
-          <p className="text-sm text-muted-foreground">No projects yet.</p>
-          <Button
-            className="mt-4"
-            variant="outline"
-            onClick={() => setShowCreate(true)}
-          >
-            Create your first project
-          </Button>
-        </div>
-      )}
-
-      {!loading && !error && projects.length > 0 && (
-        <div className="overflow-hidden rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Name</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Description</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Work Items</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Created</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map((project, i) => (
-                <tr
-                  key={project.id}
-                  className={i < projects.length - 1 ? "border-b border-border" : ""}
-                >
-                  <td className="px-4 py-3 font-medium">{project.name}</td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {project.description
-                      ? project.description.length > 60
-                        ? project.description.slice(0, 60) + "…"
-                        : project.description
-                      : <span className="italic text-muted-foreground/50">—</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={project.status} />
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {project.work_item_count}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {new Date(project.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/projects/${project.id}`}
-                      className={buttonVariants({ variant: "ghost", size: "sm" })}
-                    >
-                      View →
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   )
 }
