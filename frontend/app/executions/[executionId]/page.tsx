@@ -25,6 +25,68 @@ import type {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TERMINAL = new Set(["completed", "failed"])
+
+// ─── Markdown renderer ────────────────────────────────────────────────────────
+// Lightweight inline renderer — no dependencies. Handles ##/###, **bold**,
+// `code`, bullet lists. Keeps conversation feeling natural.
+
+function MarkdownText({ text, className }: { text: string; className?: string }) {
+  const lines = text.split("\n")
+  const elements: React.ReactNode[] = []
+
+  function renderInline(line: string): React.ReactNode[] {
+    const parts: React.ReactNode[] = []
+    // Split on **bold**, *italic*, `code`
+    const regex = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g
+    let last = 0
+    let m: RegExpExecArray | null
+    let key = 0
+    while ((m = regex.exec(line)) !== null) {
+      if (m.index > last) parts.push(line.slice(last, m.index))
+      const token = m[0]
+      if (token.startsWith("**")) {
+        parts.push(<strong key={key++} className="font-semibold text-white">{token.slice(2, -2)}</strong>)
+      } else if (token.startsWith("*")) {
+        parts.push(<em key={key++} className="italic text-white/90">{token.slice(1, -1)}</em>)
+      } else {
+        parts.push(<code key={key++} className="font-mono text-xs bg-white/10 rounded px-1 py-0.5 text-[#00DCC8]">{token.slice(1, -1)}</code>)
+      }
+      last = m.index + token.length
+    }
+    if (last < line.length) parts.push(line.slice(last))
+    return parts
+  }
+
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    const trimmed = line.trim()
+
+    if (trimmed.startsWith("### ")) {
+      elements.push(<p key={i} className="text-sm font-bold text-white mt-2 mb-0.5">{trimmed.slice(4)}</p>)
+    } else if (trimmed.startsWith("## ")) {
+      elements.push(<p key={i} className="text-base font-bold text-white mt-3 mb-1">{trimmed.slice(3)}</p>)
+    } else if (trimmed.startsWith("# ")) {
+      elements.push(<p key={i} className="text-lg font-bold text-white mt-3 mb-1">{trimmed.slice(2)}</p>)
+    } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+      elements.push(
+        <div key={i} className="flex gap-2 my-0.5">
+          <span className="text-white/40 mt-0.5 shrink-0">•</span>
+          <span>{renderInline(trimmed.slice(2))}</span>
+        </div>
+      )
+    } else if (trimmed === "") {
+      if (i > 0 && lines[i - 1].trim() !== "") {
+        elements.push(<div key={i} className="h-2" />)
+      }
+    } else {
+      elements.push(<p key={i} className="leading-relaxed">{renderInline(line)}</p>)
+    }
+    i++
+  }
+
+  return <div className={`text-sm text-white/85 space-y-0.5 ${className ?? ""}`}>{elements}</div>
+}
 const STATUS_POLL_MS = 3000
 const EVENT_POLL_MS = 2000
 
@@ -520,18 +582,18 @@ function ConversationTab({
               className={`flex ${isHuman ? "justify-end" : "justify-start"}`}
             >
               {isSummary ? (
-                <div className="max-w-[85%] w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 space-y-1">
+                <div className="max-w-[85%] w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 space-y-2">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-[#C45BFF]">Summary so far</p>
-                  <p className="text-sm text-white/80 whitespace-pre-wrap">{text}</p>
+                  <MarkdownText text={text} className="text-white/80" />
                 </div>
               ) : isHuman ? (
                 <div className="max-w-[75%] rounded-2xl rounded-tr-md bg-gradient-to-br from-[#5B6CFF] to-[#C45BFF] px-4 py-3">
-                  <p className="text-sm text-white whitespace-pre-wrap">{text}</p>
+                  <p className="text-sm text-white">{text}</p>
                 </div>
               ) : isAnswer ? (
-                <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-[#00DCC8]/15 border border-[#00DCC8]/25 px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#00DCC8] mb-1">Answer</p>
-                  <p className="text-sm text-white/85 whitespace-pre-wrap">{text}</p>
+                <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-[#00DCC8]/15 border border-[#00DCC8]/25 px-4 py-3 space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#00DCC8]">Answer</p>
+                  <MarkdownText text={text} />
                 </div>
               ) : (
                 <div className="flex gap-3 max-w-[85%]">
@@ -539,7 +601,7 @@ function ConversationTab({
                     <span className="text-white text-[10px] font-bold">AI</span>
                   </div>
                   <div className="rounded-2xl rounded-tl-md bg-white/8 border border-white/10 px-4 py-3">
-                    <p className="text-sm text-white/85 whitespace-pre-wrap">{text}</p>
+                    <MarkdownText text={text} />
                   </div>
                 </div>
               )}
