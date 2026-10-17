@@ -350,8 +350,12 @@ async def generate_policy(
             Policy.status == "draft",
         )
     )
-    if draft_result.scalar_one_or_none() is not None:
-        raise _DRAFT_EXISTS
+    existing_draft = draft_result.scalar_one_or_none()
+    if existing_draft is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "draft_exists", "policy_id": str(existing_draft.id)},
+        )
 
     # Load all workers on this work item
     workers_result = await db.execute(

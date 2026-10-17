@@ -28,7 +28,7 @@ const TERMINAL = new Set(["completed", "failed"])
 const POLL_MS = 3000
 
 type GenerateResult =
-  | { kind: "draft_exists" }
+  | { kind: "draft_exists"; policyId: string }
   | { kind: "failures"; messages: string[] }
   | { kind: "error"; message: string }
 
@@ -112,7 +112,9 @@ export default function WorkItemDetailPage({
       router.push(`/policies/${pol.id}?projectId=${projectId}&wiId=${wiId}`)
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        setGenerateResult({ kind: "draft_exists" })
+        const detail = (err.body as { detail?: { policy_id?: string } } | null)?.detail
+        const policyId = detail?.policy_id ?? ""
+        setGenerateResult({ kind: "draft_exists", policyId })
       } else if (err instanceof ApiError && err.status === 422) {
         const failures = extractPublishFailures(err.body)
         if (failures && failures.length > 0) {
@@ -222,8 +224,16 @@ export default function WorkItemDetailPage({
         {generateResult && (
           <div className="mb-6">
             {generateResult.kind === "draft_exists" && (
-              <div className="rounded-xl bg-[#F59E0B]/10 border border-[#F59E0B]/25 px-4 py-3 text-sm text-[#F59E0B]">
-                A draft policy already exists for this work item.
+              <div className="rounded-xl bg-[#F59E0B]/10 border border-[#F59E0B]/25 px-4 py-3 text-sm text-[#F59E0B] flex items-center justify-between gap-3">
+                <span>A draft policy already exists for this work item.</span>
+                {generateResult.policyId && (
+                  <Link
+                    href={`/policies/${generateResult.policyId}?projectId=${projectId}&wiId=${wiId}`}
+                    className="shrink-0 font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity"
+                  >
+                    View draft →
+                  </Link>
+                )}
               </div>
             )}
             {generateResult.kind === "failures" && (
