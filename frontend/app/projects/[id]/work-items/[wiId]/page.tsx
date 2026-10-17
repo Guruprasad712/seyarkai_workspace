@@ -53,6 +53,7 @@ export default function WorkItemDetailPage({
   const [execution, setExecution]         = useState<ExecutionOut | null>(null)
   const [policy, setPolicy]               = useState<PolicyOut | null>(null)
   const [publishedPolicy, setPublishedPolicy] = useState<PolicyOut | null>(null)
+  const [draftPolicy, setDraftPolicy]     = useState<PolicyOut | null>(null)
   const [executing, setExecuting]         = useState(false)
   const [executeError, setExecuteError]   = useState("")
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -70,6 +71,8 @@ export default function WorkItemDetailPage({
       if (execs.length > 0) setExecution(execs[execs.length - 1])
       const pub = policies.filter((p) => p.status === "published").sort((a, b) => b.version - a.version)[0] ?? null
       setPublishedPolicy(pub)
+      const draft = policies.find((p) => p.status === "draft") ?? null
+      setDraftPolicy(draft)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load work item")
     } finally {
@@ -340,6 +343,21 @@ export default function WorkItemDetailPage({
                         </span>
                       ))}
                     </div>
+                  </Link>
+                ) : draftPolicy ? (
+                  <Link
+                    href={`/policies/${draftPolicy.id}?projectId=${projectId}&wiId=${wiId}`}
+                    className="block space-y-1 hover:opacity-80 transition-opacity"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-white">v{draftPolicy.version}</span>
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold bg-[#F59E0B]/15 text-[#F59E0B]">
+                        draft
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/45">
+                      {draftPolicy.stages.length} stage{draftPolicy.stages.length !== 1 ? "s" : ""} · Open to publish →
+                    </p>
                   </Link>
                 ) : (
                   <p className="text-sm text-white/35">
