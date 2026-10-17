@@ -1,23 +1,22 @@
-// FILL IN before demo — do not commit real passwords to a public repo.
-// Replace every FILL_IN_* value with the actual seeded credentials.
+// intentionally public demo credentials — safe to commit
 export const DEMO_ACCOUNTS = [
   {
     role: "Builder",
     meaning: "Builds agents and runs work",
-    email: "builder@seyarkai.example", // FILL IN
-    password: "builder123",      // FILL IN
+    email: "builder@seyarkai.example",
+    password: "builder123",
   },
   {
     role: "Reviewer",
     meaning: "Approves checkpoints",
-    email: "reviewer@seyarkai.example", // FILL IN
-    password: "reviewer123",       // FILL IN
+    email: "reviewer@seyarkai.example",
+    password: "reviewer123",
   },
   {
     role: "Observer",
     meaning: "Read-only, can ask questions",
-    email: "observer@seyarkai.example", // FILL IN
-    password: "observer123",       // FILL IN
+    email: "observer@seyarkai.example",
+    password: "observer123",
   },
 ] as const
 
