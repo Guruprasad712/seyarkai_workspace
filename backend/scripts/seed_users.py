@@ -16,6 +16,12 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load repo-root .env so SEED_* vars are available without manual export
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
