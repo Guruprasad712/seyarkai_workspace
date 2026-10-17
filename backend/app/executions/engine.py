@@ -60,12 +60,10 @@ async def _collect_stage_summary(
     events = result.scalars().all()
     if not events:
         return None
-    # Each agent.message is stored with payload {"preview": text[:500]}
-    # Use the last message (most likely to be the final output/conclusion)
-    # plus any artifact URLs mentioned
     parts: list[str] = []
     for ev in events:
-        text = (ev.payload or {}).get("preview", "").strip()
+        p = ev.payload or {}
+        text = (p.get("text") or p.get("preview") or "").strip()
         if text:
             parts.append(text)
     if not parts:
@@ -385,7 +383,8 @@ class ExecutionEngine:
                         payload = {k: v for k, v in payload.items()
                                    if k not in ("structured_result", "_html_content")}
                     elif event["event_type"] == "agent.message":
-                        payload = {"preview": event["payload"].get("text", "")[:500]}
+                        full = event["payload"].get("text", "")
+                        payload = {"text": full, "preview": full[:200]}
 
                     await _persist_event(
                         db, execution_id, sid,
