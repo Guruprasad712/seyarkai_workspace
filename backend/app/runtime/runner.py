@@ -31,6 +31,7 @@ def run_stage(
     tool_names: list[str],
     max_llm_calls: int | None = None,
     timeout_seconds: float = 120.0,
+    tool_server_map: dict[str, str] | None = None,
     _extra_tools: list[Any] | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Return an async generator that runs one stage and yields normalised dicts.
@@ -47,6 +48,7 @@ def run_stage(
         tool_names=tool_names,
         max_llm_calls=max_llm_calls,
         timeout_seconds=timeout_seconds,
+        tool_server_map=tool_server_map,
         _extra_tools=_extra_tools,
     )
 
@@ -57,10 +59,13 @@ async def _run_stage_gen(
     tool_names: list[str],
     max_llm_calls: int | None,
     timeout_seconds: float,
+    tool_server_map: dict[str, str] | None,
     _extra_tools: list[Any] | None,
 ) -> AsyncGenerator[dict, None]:
     agent, toolsets = build_agent(
-        agent_definition, tool_names, _extra_tools=_extra_tools
+        agent_definition, tool_names,
+        tool_server_map=tool_server_map,
+        _extra_tools=_extra_tools,
     )
     runner = InMemoryRunner(agent=agent, app_name="stage_runner")
 

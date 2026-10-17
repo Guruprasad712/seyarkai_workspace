@@ -55,6 +55,7 @@ def build_agent(
     agent_definition: dict[str, Any],
     tool_names: list[str],
     *,
+    tool_server_map: dict[str, str] | None = None,
     _extra_tools: list[Any] | None = None,
 ) -> tuple[LlmAgent, list[McpToolset]]:
     """Build an LlmAgent for the given agent definition and tool list.
@@ -89,10 +90,8 @@ def build_agent(
         # Group by server_key and build one McpToolset per server
         by_server: dict[str, list[str]] = {}
         for tn in tool_names:
-            # tool_name maps to server_key via mcp_tools.server_key in the DB;
-            # here we use the catalog constant for the knowledge server.
-            server_key = "knowledge"  # only server available now
-            by_server.setdefault(server_key, []).append(tn)
+            sk = (tool_server_map or {}).get(tn, "knowledge")
+            by_server.setdefault(sk, []).append(tn)
 
         for server_key in by_server:
             module = _SERVER_MODULES.get(server_key)

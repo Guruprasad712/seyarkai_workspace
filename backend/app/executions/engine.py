@@ -28,10 +28,12 @@ def _now() -> datetime:
 
 
 _SUMMARY_PROMPT = (
-    "Summarize your work in this stage.\n"
-    "Include: what you were asked to do, what you actually did, tools you used and their "
-    "results, any issues or blockers, and your recommendation (ready for approval or needs "
-    "changes). Be clear and concise — speak as a coworker explaining to your manager."
+    "Based on the work you just completed in this stage, provide a structured summary "
+    "for the human reviewer.\n"
+    "Include: 3 key findings from the information you gathered or produced, "
+    "and 1 clear recommendation (approve and proceed, or flag concerns).\n"
+    "Write in plain language as if briefing a colleague. "
+    "Do not describe your own instructions, tools, or process — only what you found and recommend."
 )
 
 
@@ -39,6 +41,7 @@ async def _call_summary_stage(
     agent_definition: dict,
     tool_names: list[str],
     timeout_seconds: float,
+    tool_server_map: dict[str, str] | None = None,
 ) -> str | None:
     try:
         async for event in run_stage(
@@ -47,6 +50,7 @@ async def _call_summary_stage(
             tool_names,
             max_llm_calls=1,
             timeout_seconds=timeout_seconds,
+            tool_server_map=tool_server_map,
         ):
             if event["event_type"] == "stage.stream_end":
                 return event["payload"].get("final_text") or None
@@ -167,6 +171,7 @@ class ExecutionEngine:
         # Retained after loop to reuse for final-review summary
         last_agent_definition: dict = {}
         last_tool_names: list[str] = []
+        last_tool_server_map: dict[str, str] = {}
 
         try:
             # --------------------------------------------------------------
@@ -196,6 +201,7 @@ class ExecutionEngine:
                 )
                 tools = list(result.scalars().all())
                 tool_names = [t.tool_name for t in tools]
+                tool_server_map = {t.tool_name: t.server_key for t in tools}
 
                 agent_definition = {
                     "name": agent_name,
@@ -204,6 +210,7 @@ class ExecutionEngine:
                 }
                 last_agent_definition = agent_definition
                 last_tool_names = tool_names
+                last_tool_server_map = tool_server_map
 
                 await _persist_event(
                     db, execution_id, sid,
@@ -301,6 +308,7 @@ class ExecutionEngine:
                     task_text,
                     tool_names,
                     timeout_seconds=settings.STAGE_TIMEOUT_SECONDS,
+                    tool_server_map=tool_server_map,
                 ):
                     if event["event_type"] == "stage.stream_end":
                         # Persist stage output as a message
@@ -376,7 +384,8 @@ class ExecutionEngine:
                 if cp is not None:
                     # Collect agent summary before pausing (best-effort)
                     summary_text = await _call_summary_stage(
-                        agent_definition, tool_names, settings.STAGE_TIMEOUT_SECONDS
+                        agent_definition, tool_names, settings.STAGE_TIMEOUT_SECONDS,
+                        tool_server_map=tool_server_map,
                     )
                     execution.pending_summary = summary_text
                     if summary_text:
@@ -414,7 +423,8 @@ class ExecutionEngine:
                 # Collect agent summary before final-review pause (best-effort)
                 if last_agent_definition:
                     summary_text = await _call_summary_stage(
-                        last_agent_definition, last_tool_names, settings.STAGE_TIMEOUT_SECONDS
+                        last_agent_definition, last_tool_names, settings.STAGE_TIMEOUT_SECONDS,
+                        tool_server_map=last_tool_server_map,
                     )
                     execution.pending_summary = summary_text
                     if summary_text:

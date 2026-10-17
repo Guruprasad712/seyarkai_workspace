@@ -461,8 +461,8 @@ async def test_engine_collects_summary_before_checkpoint(engine_setup, test_db_u
 
     # run_stage must be called twice: once for stage work, once for summary
     assert call_count == 2
-    # Second call must contain "Summarize" to distinguish it from the stage task
-    assert "Summarize" in call_prompts[1]
+    # Second call must be the summary prompt (contains "findings" and "recommendation")
+    assert "findings" in call_prompts[1] or "recommendation" in call_prompts[1]
 
     async with _test_db(test_db_url) as db:
         result = await db.execute(
