@@ -13,5 +13,4 @@ Suggested capture order follows the demo walkthrough.
 | `execution-conversation.png` | Execution page — Conversation tab with agent messages |
 | `execution-timeline.png` | Execution page — Timeline tab with event list |
 | `execution-checkpoints.png` | Execution page — Checkpoints tab with pending checkpoint |
-| `execution-artifacts.png` | Execution page — Artifacts tab showing generated document |
 | `users.png` | Users page (Admin view) showing role badges |

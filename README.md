@@ -29,7 +29,7 @@ Open two browser windows side by side — one as Builder, one as Reviewer.
 2. **Reviewer:** Open the same execution. Watch the Conversation tab — the agent is searching the knowledge base and drafting findings.
 3. **Reviewer:** When the pink dot appears on the Checkpoints tab, open it. The compliance review is waiting for your approval.
 4. **Reviewer:** Click *Approve*. The agent resumes and drafts the renewal recommendation document.
-5. **Both:** Switch to the Artifacts tab. The generated document is there, rendered in a sandboxed iframe. The final review checkpoint fires — Reviewer approves to close the work item.
+5. **Reviewer:** The final review checkpoint fires. Review the agent's output in the Conversation tab and approve to close the work item.
 
 ---
 
@@ -37,19 +37,19 @@ Open two browser windows side by side — one as Builder, one as Reviewer.
 
 AI agents can now run multi-step tasks for hours, but the tooling around them was built for a single user. There is no shared view, no way for a team to watch what an agent is doing in real time, no hard stop before a consequential action, and no audit trail that humans can actually read. Teams end up running agents in a black box and finding out what happened after it is too late to steer.
 
-Seyarkai makes AI work a team activity: anyone on the team can join an execution, watch the structured event timeline, send the agent guidance, respond to checkpoints, and see the final artifact — all with roles that determine what each person can do.
+Seyarkai makes AI work a team activity: anyone on the team can join an execution, watch the structured event timeline, send the agent guidance, and respond to checkpoints — all with roles that determine what each person can do.
 
 ---
 
 ## What it does
 
 - **Governed execution with mandatory checkpoints.** Policies define stages and checkpoints. The execution engine halts at every checkpoint and cannot proceed until the assigned reviewer responds. Hard stops, not suggestions.
-- **Shared execution workspace.** Four tabs — Conversation, Timeline, Artifacts, Checkpoints — update in real time for every participant. No polling required on the client side (server-sent events).
+- **Shared execution workspace.** Conversation, Timeline, and Checkpoints tabs update in real time for every participant. No polling required on the client side (server-sent events).
 - **LLM-proposed policies, deterministically validated.** The AI generates a policy proposal in JSON. Before anything is saved to the database, a validation layer checks that every stage has a known AI worker, every checkpoint has a known human assignee, and exactly one final-review checkpoint exists. Invalid proposals are rejected with a 422 before they touch the DB.
 - **Four roles, enforced server-side.** Admin, Builder, Reviewer, Observer. Every sensitive endpoint is protected by a `require_any` dependency that checks the JWT claim. Frontend permission checks are a UX layer only.
 - **Structured event timeline — no raw chain-of-thought.** Agent thought content is stripped at the normalisation layer before any event is persisted or streamed. What you see is what the agent decided, not how it got there.
 - **Knowledge retrieval with freshness classification.** Every knowledge document has a `last_verified_at` timestamp. Retrieval results are classified as *fresh* (< 90 days), *ageing* (< 180 days), or *stale* (≥ 180 days), and stale documents carry an explicit warning injected into the agent's context.
-- **Document artifacts stored durably in Postgres.** Generated HTML documents are stored in the `artifacts` table and served from the database with `Content-Security-Policy: sandbox` — not from a temp file or Google Drive.
+- **Agent-generated documents stored durably in Postgres.** Agents can generate a document artifact when the task requires one. HTML output is stored in the `artifacts` table and served with `Content-Security-Policy: sandbox`.
 
 ---
 
@@ -61,8 +61,8 @@ The pre-seeded scenario is a software contract renewal. The Procurement Agent is
 2. **Stage 1 — Compliance Review.** The agent calls `knowledge_search` at least three times, retrieving payment terms, compliance requirements, and approval thresholds. Each result is tagged with its freshness.
 3. The mid-stage **Review checkpoint** fires. The reviewer sees the compliance findings and a summary of stale document warnings.
 4. Reviewer approves. The agent moves to Stage 2.
-5. **Stage 2 — Draft Renewal Recommendation.** The agent calls `generate_document` with the title "TechSoft Solutions Contract Renewal Recommendation". The document covers executive summary, compliance findings, stale flags, and a proceed/escalate decision.
-6. The **Final Review checkpoint** fires. The reviewer reads the full document in the Artifacts tab and approves to close the work item.
+5. **Stage 2 — Draft Renewal Recommendation.** The agent calls `generate_document` and produces a "TechSoft Solutions Contract Renewal Recommendation" covering executive summary, compliance findings, stale flags, and a proceed/escalate decision.
+6. The **Final Review checkpoint** fires. The reviewer approves to close the work item.
 
 ---
 
@@ -144,7 +144,7 @@ sequenceDiagram
 - **MCP tools in isolated subprocesses, granted per agent.** Each agent version has an explicit tool list. The ADK runner spawns the MCP server over stdio only for those tools. An agent cannot call a tool it was not granted.
 - **Roles enforced server-side.** Every mutating endpoint uses `require_any("admin", "builder", ...)` as a FastAPI dependency. The frontend `can` checks are a UX convenience only — they do not gate the API.
 - **Checkpoints as hard stops.** When the engine reaches a checkpoint, it sets `execution.status = "waiting_for_approval"`, emits a `checkpoint.triggered` event, and the background task exits. The execution does not advance until a human explicitly responds.
-- **Durable artifacts in Postgres, rendered in a sandbox.** Generated HTML documents are stored in the `artifacts` table as `html_content TEXT`. The authenticated `/artifacts/{id}` endpoint serves them with `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff` — no filesystem dependency, no Google Drive requirement.
+- **Agent-generated documents stored in Postgres, served in a sandbox.** When an agent calls `generate_document`, the HTML output is stored in the `artifacts` table as `html_content TEXT` and served via `/artifacts/{id}` with `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff` — no filesystem dependency, no Google Drive requirement.
 
 ---
 
@@ -326,8 +326,6 @@ seyarkai_workspace/
 | *Login with demo access card* | *Home dashboard* | *Project with work items* |
 | ![Work item](docs/screenshots/work-item.png) | ![Policy builder](docs/screenshots/policy-builder.png) | ![Conversation](docs/screenshots/execution-conversation.png) |
 | *Work item detail* | *Policy editor* | *Execution — Conversation tab* |
-| ![Timeline](docs/screenshots/execution-timeline.png) | ![Checkpoints](docs/screenshots/execution-checkpoints.png) | ![Artifacts](docs/screenshots/execution-artifacts.png) |
-| *Execution — Timeline tab* | *Execution — Checkpoints tab* | *Execution — Artifacts tab* |
 
 ---
 
