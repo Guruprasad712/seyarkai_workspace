@@ -8,6 +8,8 @@ import { apiFetch, ApiError, extractPublishFailures } from "@/lib/api"
 import { StatusPill } from "@/components/status-pill"
 import { BigButton } from "@/components/big-button"
 import { GlassCard } from "@/components/glass-card"
+import { useAuth } from "@/components/auth-provider"
+import { can } from "@/lib/permissions"
 import type { Agent, AgentVersion, Capability, McpTool, PublishFailure } from "@/lib/types"
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -217,9 +219,10 @@ type VersionRowProps = {
   agentId: string
   allTools: McpTool[]
   onRefresh: () => void
+  canEdit: boolean
 }
 
-function VersionRow({ version, agentId, allTools, onRefresh }: VersionRowProps) {
+function VersionRow({ version, agentId, allTools, onRefresh, canEdit }: VersionRowProps) {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [publishing, setPublishing] = useState(false)
@@ -284,7 +287,7 @@ function VersionRow({ version, agentId, allTools, onRefresh }: VersionRowProps) 
           </span>
         )}
         <div className="ml-auto flex gap-2" onClick={(e) => e.stopPropagation()}>
-          {version.status === "draft" && !editing && (
+          {version.status === "draft" && !editing && canEdit && (
             <>
               <BigButton type="button" variant="ghost" size="sm" onClick={() => setEditing(true)}>
                 Edit
@@ -366,6 +369,8 @@ export default function AgentDetailPage({
 }) {
   const { id } = use(params)
   const router = useRouter()
+  const { user } = useAuth()
+  const canEdit = can.editAgents(user?.role ?? "")
 
   const [agent, setAgent] = useState<Agent | null>(null)
   const [tools, setTools] = useState<McpTool[]>([])
@@ -465,7 +470,7 @@ export default function AgentDetailPage({
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-heading text-xl font-bold text-white">Versions</h2>
-          {!hasDraft && (
+          {!hasDraft && canEdit && (
             <BigButton
               type="button"
               variant="ghost"
@@ -506,6 +511,7 @@ export default function AgentDetailPage({
               agentId={agent.id}
               allTools={tools}
               onRefresh={load}
+              canEdit={canEdit}
             />
           ))}
       </div>

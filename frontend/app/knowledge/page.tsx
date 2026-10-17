@@ -6,6 +6,8 @@ import { GlassCard } from "@/components/glass-card"
 import { BigButton } from "@/components/big-button"
 import { FreshnessBadge } from "@/components/freshness-badge"
 import { InlineLoader } from "@/components/loader"
+import { useAuth } from "@/components/auth-provider"
+import { can } from "@/lib/permissions"
 import type { KnowledgeDocument } from "@/lib/types"
 
 // ─── Add document form ────────────────────────────────────────────────────────
@@ -13,7 +15,7 @@ import type { KnowledgeDocument } from "@/lib/types"
 const inputCls =
   "w-full rounded-xl glass px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:ring-2 focus:ring-[#5B6CFF]/60 disabled:opacity-50 transition-all"
 
-function AddDocForm({ onAdded }: { onAdded: (doc: KnowledgeDocument) => void }) {
+function AddDocForm({ onAdded, canWrite }: { onAdded: (doc: KnowledgeDocument) => void; canWrite: boolean }) {
   const [open, setOpen]       = useState(false)
   const [title, setTitle]     = useState("")
   const [source, setSource]   = useState("")
@@ -38,6 +40,8 @@ function AddDocForm({ onAdded }: { onAdded: (doc: KnowledgeDocument) => void }) 
       setSaving(false)
     }
   }
+
+  if (!canWrite) return null
 
   if (!open) {
     return (
@@ -77,7 +81,7 @@ function AddDocForm({ onAdded }: { onAdded: (doc: KnowledgeDocument) => void }) 
 
 // ─── Document card ────────────────────────────────────────────────────────────
 
-function DocCard({ doc, onVerified }: { doc: KnowledgeDocument; onVerified: (updated: KnowledgeDocument) => void }) {
+function DocCard({ doc, onVerified, canWrite }: { doc: KnowledgeDocument; onVerified: (updated: KnowledgeDocument) => void; canWrite: boolean }) {
   const [verifying, setVerifying] = useState(false)
   const [error, setError]         = useState("")
 
@@ -111,9 +115,11 @@ function DocCard({ doc, onVerified }: { doc: KnowledgeDocument; onVerified: (upd
       <div className="flex items-center justify-between mt-auto">
         <span className="font-mono text-xs text-white/25">{doc.age_days}d ago</span>
         {error && <p className="text-xs text-[#EF4444]">{error}</p>}
-        <BigButton variant={isStale ? "gradient" : "ghost"} size="sm" loading={verifying} onClick={handleVerify}>
-          {verifying ? "Verifying…" : "Verify"}
-        </BigButton>
+        {canWrite && (
+          <BigButton variant={isStale ? "gradient" : "ghost"} size="sm" loading={verifying} onClick={handleVerify}>
+            {verifying ? "Verifying…" : "Verify"}
+          </BigButton>
+        )}
       </div>
     </GlassCard>
   )
@@ -122,6 +128,8 @@ function DocCard({ doc, onVerified }: { doc: KnowledgeDocument; onVerified: (upd
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function KnowledgePage() {
+  const { user } = useAuth()
+  const canWrite = can.addKnowledge(user?.role ?? "")
   const [docs, setDocs]     = useState<KnowledgeDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError]   = useState("")
@@ -143,9 +151,9 @@ export default function KnowledgePage() {
         <div className="mb-8 flex items-start justify-between gap-4">
           <div>
             <h1 className="font-heading text-4xl font-black text-white">Company Brain</h1>
-            <p className="mt-1.5 text-white/50">Knowledge documents injected into agent stage tasks.</p>
+            <p className="mt-1.5 text-white/50">Your agents are only as good as what they read. Is it still true?</p>
           </div>
-          <AddDocForm onAdded={(doc) => setDocs(prev => [doc, ...prev])} />
+          <AddDocForm onAdded={(doc) => setDocs(prev => [doc, ...prev])} canWrite={canWrite} />
         </div>
 
         {/* Freshness summary */}
@@ -181,7 +189,7 @@ export default function KnowledgePage() {
         {!loading && !error && docs.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {docs.map(doc => (
-              <DocCard key={doc.id} doc={doc} onVerified={(updated) => setDocs(prev => prev.map(d => d.id === updated.id ? updated : d))} />
+              <DocCard key={doc.id} doc={doc} canWrite={canWrite} onVerified={(updated) => setDocs(prev => prev.map(d => d.id === updated.id ? updated : d))} />
             ))}
           </div>
         )}

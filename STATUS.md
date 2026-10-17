@@ -84,8 +84,25 @@ Date: 2026-10-11   Region: us-central1
 - Backend: https://seyarkai-backend-337434518869.us-central1.run.app
 - Frontend: https://seyarkai-frontend-337434518869.us-central1.run.app
 
+### Done (feat/roles branch — post Day 8 feature)
+- [x] Alembic migration 0004_roles: remap super_admin→admin, unknown→observer, ADD CHECK CONSTRAINT
+- [x] require_any(*roles) replaces require_role(); wired on all mutating endpoints per role matrix
+- [x] _assert_human_worker: admin/reviewer role required for checkpoint assignees
+- [x] User CRUD endpoints: POST /users, PATCH /users/{id}, PATCH .../deactivate, PATCH .../activate (admin-only)
+- [x] GET /users/directory (any-auth) with ?eligible_for=<wiId> filter for assignee pickers
+- [x] seed_users.py: four demo users (admin/builder/reviewer/observer) with env-var passwords
+- [x] test_roles.py: 11 tests; all 209 tests passing (3 live-only errors in test_knowledge fixture)
+- [x] permissions.ts: can.* role-check helpers
+- [x] ForbiddenToast: 403 event dispatch in api.ts, toast component wired in layout
+- [x] app-shell.tsx: role pill (violet/indigo/teal/dim) + Users nav link (admin only)
+- [x] Per-page role guards: agents, projects, work-items, knowledge, policy editor, execution
+- [x] /app/users/page.tsx: admin Users management page with Aurora Glass table and add-user dialog
+- [x] npm run build: zero errors
+
 ### Next
 Day 9 — CI pipeline: GitHub Actions build→push→deploy; end-to-end live execution smoke test.
+Production: before deploying feat/roles, run alembic upgrade head against Cloud SQL (via Auth Proxy),
+re-run seed_users.py with four role env vars, add 0004 migration step to cloudbuild.yaml.
 
 ### Decision log
 - LLM access is Vertex AI via ADC; AI Studio prepay was unfunded so `GOOGLE_GENAI_USE_VERTEXAI=1` is the only working path.

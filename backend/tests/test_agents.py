@@ -1,4 +1,4 @@
-"""Agent module tests — all offline (no Vertex AI calls).
+﻿"""Agent module tests â€” all offline (no Vertex AI calls).
 
 Uses the same _test_db / async_client pattern as test_auth.py.
 """
@@ -43,13 +43,13 @@ async def auth_headers(test_db_url: str, async_client: AsyncClient):
         await db.execute(
             text(
                 "INSERT INTO users (id, email, name, hashed_password, role, status, created_at, updated_at) "
-                "VALUES (:id, :email, :name, :hp, 'member', 'active', now(), now())"
+                "VALUES (:id, :email, :name, :hp, 'admin', 'active', now(), now())"
             ),
             {"id": user_id, "email": "agents_test@example.com", "name": "Test", "hp": hash_password("pw")},
         )
         await db.commit()
 
-    token = create_access_token(user_id, "member")
+    token = create_access_token(user_id, "admin")
     yield {"Authorization": f"Bearer {token}"}
 
     async with _test_db(test_db_url) as db:
@@ -309,7 +309,7 @@ async def test_patch_agent_rename_to_own_name(async_client: AsyncClient, auth_he
     r = await async_client.patch(
         f"/agents/{agent_id}", headers=auth_headers, json={"name": own_name}
     )
-    # Renaming to own name hits the unique constraint with itself — Postgres UPDATE
+    # Renaming to own name hits the unique constraint with itself â€” Postgres UPDATE
     # with same value doesn't raise a conflict. Should be 200.
     assert r.status_code == 200
 
@@ -463,7 +463,7 @@ async def test_publish_retires_previous(async_client: AsyncClient, auth_headers,
 async def test_publish_collect_all_failures(
     test_db_url: str, async_client: AsyncClient, auth_headers
 ):
-    """A version with empty instructions, no capabilities, and no tools → 3 failures."""
+    """A version with empty instructions, no capabilities, and no tools â†’ 3 failures."""
     # Create agent with minimal valid data
     r = await async_client.post(
         "/agents",
@@ -571,7 +571,7 @@ async def test_publish_not_draft(async_client: AsyncClient, auth_headers, create
     )
     assert r1.status_code == 200
 
-    # Second publish on same version → not_draft failure
+    # Second publish on same version â†’ not_draft failure
     r2 = await async_client.post(
         f"/agents/{agent_id}/versions/{version_id}/publish", headers=auth_headers
     )

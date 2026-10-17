@@ -7,6 +7,7 @@ import { apiFetch, ApiError } from "@/lib/api"
 import { useAuth } from "@/components/auth-provider"
 import { GlassCard } from "@/components/glass-card"
 import { BigButton, ArrowTile } from "@/components/big-button"
+import { can } from "@/lib/permissions"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -231,7 +232,7 @@ export default function HomePage() {
               செயற்கை
             </div>
             <div className="font-heading text-2xl font-bold text-white/80 tracking-wide">Seyarkai</div>
-            <p className="text-white/45 text-sm">Intelligence, made by us. Governed by you.</p>
+            <p className="text-white/45 text-sm">Co-op mode for AI work.</p>
           </div>
         </div>
 
@@ -241,7 +242,7 @@ export default function HomePage() {
             {greeting}{user?.name ? `, ${user.name}` : ""}
           </p>
           <h1 className="font-heading text-4xl md:text-5xl font-black text-white leading-tight">
-            What should we<br className="hidden sm:block" /> execute today?
+            What should we run together today?
           </h1>
         </div>
 
@@ -254,7 +255,7 @@ export default function HomePage() {
           >
             <div>
               <h2 className="font-heading text-xl font-bold text-white">Projects</h2>
-              <p className="text-sm text-white/55 mt-1">Work items, policies and live executions.</p>
+              <p className="text-sm text-white/55 mt-1">Shared rooms where your team and agents work on the same thing.</p>
             </div>
             <p className="text-sm text-white/50">
               {projects.length > 0 ? `${projects.length} active` : "No projects yet"}
@@ -274,7 +275,7 @@ export default function HomePage() {
           >
             <div>
               <h2 className="font-heading text-xl font-bold text-white">Knowledge</h2>
-              <p className="text-sm text-white/55 mt-1">Company Brain with freshness checks.</p>
+              <p className="text-sm text-white/55 mt-1">Old facts make bad decisions. We flag them first.</p>
             </div>
             {staleCount > 0 ? (
               <p className="text-sm font-semibold text-[#FF7AC8]">{staleCount} stale document{staleCount !== 1 ? "s" : ""}</p>
@@ -296,7 +297,7 @@ export default function HomePage() {
           >
             <div>
               <h2 className="font-heading text-xl font-bold text-white">Agents</h2>
-              <p className="text-sm text-white/55 mt-1">Reusable AI workers and their tools.</p>
+              <p className="text-sm text-white/55 mt-1">Tireless teammates with only the tools you hand them.</p>
             </div>
             <p className="text-sm text-white/50">
               {agentCount > 0 ? `${agentCount} published` : "No agents yet"}
@@ -308,6 +309,25 @@ export default function HomePage() {
               </BigButton>
             </Link>
           </GlassCard>
+
+          {/* Users — admin only */}
+          {can.manageUsers(user?.role ?? "") && (
+            <GlassCard
+              className="flex flex-col gap-4 hover:bg-white/8 transition-colors duration-200"
+              style={{ background: "rgba(196,91,255,0.05)" } as React.CSSProperties}
+            >
+              <div>
+                <h2 className="font-heading text-xl font-bold text-white">Users</h2>
+                <p className="text-sm text-white/55 mt-1">Everyone gets exactly the power they need.</p>
+              </div>
+              <Link href="/users" className="mt-auto">
+                <BigButton variant="ghost" size="md" className="w-full justify-between">
+                  <span>Open Users</span>
+                  <ArrowTile color="violet" />
+                </BigButton>
+              </Link>
+            </GlassCard>
+          )}
         </div>
 
         {/* ── Attention + Live strips ──────────────────────────────────────────── */}
@@ -317,7 +337,7 @@ export default function HomePage() {
             {pendingCps.length > 0 && (
               <GlassCard glow="pink" padding={false} className="p-5 space-y-3">
                 <p className="text-xs font-bold uppercase tracking-widest text-[#FF7AC8]">
-                  Needs your attention
+                  Waiting on you
                 </p>
                 {pendingCps.map((cp, i) => (
                   <Link
@@ -339,7 +359,7 @@ export default function HomePage() {
             {liveExec && (
               <GlassCard glow="teal" padding={false} className="p-5 space-y-3">
                 <p className="text-xs font-bold uppercase tracking-widest text-[#00DCC8]">
-                  Live now
+                  Your team is live on
                 </p>
                 <Link href={liveExec.href} className="block space-y-3 hover:opacity-90 transition-opacity">
                   <p className="text-base font-semibold text-white">{liveExec.label}</p>
@@ -353,6 +373,13 @@ export default function HomePage() {
               </GlassCard>
             )}
           </div>
+        )}
+
+        {/* Empty state — nothing live or pending */}
+        {!pendingCps.length && !liveExec && (
+          <p className="text-center text-sm text-white/30">
+            Nothing running. Start a run and bring your team in.
+          </p>
         )}
 
         {/* Backend status footer */}

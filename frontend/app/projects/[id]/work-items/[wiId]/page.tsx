@@ -8,6 +8,8 @@ import { GlassCard } from "@/components/glass-card"
 import { BigButton } from "@/components/big-button"
 import { StatusPill } from "@/components/status-pill"
 import { InlineLoader } from "@/components/loader"
+import { useAuth } from "@/components/auth-provider"
+import { can } from "@/lib/permissions"
 import type { ExecutionOut, PolicyOut, WorkItem } from "@/lib/types"
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -26,7 +28,7 @@ const TERMINAL = new Set(["completed", "failed"])
 const POLL_MS = 3000
 
 type GenerateResult =
-  | { kind: "draft_exists" }
+  | { kind: "draft_exists"; policyId: string }
   | { kind: "failures"; messages: string[] }
   | { kind: "error"; message: string }
 
@@ -39,6 +41,9 @@ export default function WorkItemDetailPage({
 }) {
   const { id: projectId, wiId } = use(params)
   const router = useRouter()
+  const { user } = useAuth()
+  const canEditPolicy = can.editPolicy(user?.role ?? "")
+  const canExecute = can.execute(user?.role ?? "")
 
   const [workItem, setWorkItem]           = useState<WorkItem | null>(null)
   const [loading, setLoading]             = useState(true)
@@ -48,6 +53,7 @@ export default function WorkItemDetailPage({
   const [execution, setExecution]         = useState<ExecutionOut | null>(null)
   const [policy, setPolicy]               = useState<PolicyOut | null>(null)
   const [publishedPolicy, setPublishedPolicy] = useState<PolicyOut | null>(null)
+  const [draftPolicy, setDraftPolicy]     = useState<PolicyOut | null>(null)
   const [executing, setExecuting]         = useState(false)
   const [executeError, setExecuteError]   = useState("")
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -65,6 +71,8 @@ export default function WorkItemDetailPage({
       if (execs.length > 0) setExecution(execs[execs.length - 1])
       const pub = policies.filter((p) => p.status === "published").sort((a, b) => b.version - a.version)[0] ?? null
       setPublishedPolicy(pub)
+      const draft = policies.find((p) => p.status === "draft") ?? null
+      setDraftPolicy(draft)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load work item")
     } finally {
@@ -107,7 +115,9 @@ export default function WorkItemDetailPage({
       router.push(`/policies/${pol.id}?projectId=${projectId}&wiId=${wiId}`)
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        setGenerateResult({ kind: "draft_exists" })
+        const detail = (err.body as { detail?: { policy_id?: string } } | null)?.detail
+        const policyId = detail?.policy_id ?? ""
+        setGenerateResult({ kind: "draft_exists", policyId })
       } else if (err instanceof ApiError && err.status === 422) {
         const failures = extractPublishFailures(err.body)
         if (failures && failures.length > 0) {
@@ -181,6 +191,7 @@ export default function WorkItemDetailPage({
               <h1 className="font-heading text-3xl font-black text-white">{workItem.name}</h1>
               <StatusPill status={workItem.status} />
             </div>
+            <p className="mt-1 text-sm text-white/45">One objective. One agent. Your whole team.</p>
             <p className="mt-1 font-mono text-xs text-white/30">
               Created {new Date(workItem.created_at).toLocaleDateString()}
             </p>
@@ -188,12 +199,12 @@ export default function WorkItemDetailPage({
 
           {/* Actions */}
           <div className="flex shrink-0 flex-col items-end gap-2">
-            {hasAiWorker && (
+            {hasAiWorker && canEditPolicy && (
               <BigButton variant="ghost" size="md" loading={generating} onClick={handleGeneratePolicy}>
                 ✦ Generate Policy
               </BigButton>
             )}
-            {workItem.status !== "completed" && (
+            {workItem.status !== "completed" && canExecute && (
               <BigButton variant="gradient" size="md" loading={executing} onClick={handleExecute}>
                 ▶ Execute
               </BigButton>
@@ -216,8 +227,16 @@ export default function WorkItemDetailPage({
         {generateResult && (
           <div className="mb-6">
             {generateResult.kind === "draft_exists" && (
-              <div className="rounded-xl bg-[#F59E0B]/10 border border-[#F59E0B]/25 px-4 py-3 text-sm text-[#F59E0B]">
-                A draft policy already exists for this work item.
+              <div className="rounded-xl bg-[#F59E0B]/10 border border-[#F59E0B]/25 px-4 py-3 text-sm text-[#F59E0B] flex items-center justify-between gap-3">
+                <span>A draft policy already exists for this work item.</span>
+                {generateResult.policyId && (
+                  <Link
+                    href={`/policies/${generateResult.policyId}?projectId=${projectId}&wiId=${wiId}`}
+                    className="shrink-0 font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity"
+                  >
+                    View draft →
+                  </Link>
+                )}
               </div>
             )}
             {generateResult.kind === "failures" && (
@@ -324,6 +343,21 @@ export default function WorkItemDetailPage({
                         </span>
                       ))}
                     </div>
+                  </Link>
+                ) : draftPolicy ? (
+                  <Link
+                    href={`/policies/${draftPolicy.id}?projectId=${projectId}&wiId=${wiId}`}
+                    className="block space-y-1 hover:opacity-80 transition-opacity"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-white">v{draftPolicy.version}</span>
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold bg-[#F59E0B]/15 text-[#F59E0B]">
+                        draft
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/45">
+                      {draftPolicy.stages.length} stage{draftPolicy.stages.length !== 1 ? "s" : ""} · Open to publish →
+                    </p>
                   </Link>
                 ) : (
                   <p className="text-sm text-white/35">

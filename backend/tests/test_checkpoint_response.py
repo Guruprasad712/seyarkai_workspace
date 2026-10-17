@@ -1,4 +1,4 @@
-"""Checkpoint response endpoint tests — all offline (no engine runs)."""
+﻿"""Checkpoint response endpoint tests â€” all offline (no engine runs)."""
 from __future__ import annotations
 
 import contextlib
@@ -66,13 +66,13 @@ async def cp_setup(test_db_url: str, async_client: AsyncClient):
     execution_id = str(uuid.uuid4())
 
     async with _test_db(test_db_url) as db:
-        for uid, suffix in [(assignee_id, "asgn"), (other_id, "othr")]:
+        for uid, suffix, role in [(assignee_id, "asgn", "admin"), (other_id, "othr", "reviewer")]:
             await db.execute(
                 text(
                     "INSERT INTO users (id, email, name, hashed_password, role, status, created_at, updated_at) "
-                    "VALUES (:id, :email, :name, :hp, 'member', 'active', now(), now())"
+                    "VALUES (:id, :email, :name, :hp, :role, 'active', now(), now())"
                 ),
-                {"id": uid, "email": f"cp_{suffix}_{uid[:8]}@example.com", "name": f"CP {suffix}", "hp": hash_password("pw")},
+                {"id": uid, "email": f"cp_{suffix}_{uid[:8]}@example.com", "name": f"CP {suffix}", "hp": hash_password("pw"), "role": role},
             )
         await db.execute(
             text(
@@ -163,8 +163,8 @@ async def cp_setup(test_db_url: str, async_client: AsyncClient):
         )
         await db.commit()
 
-    assignee_token = create_access_token(assignee_id, "member")
-    other_token = create_access_token(other_id, "member")
+    assignee_token = create_access_token(assignee_id, "admin")
+    other_token = create_access_token(other_id, "reviewer")
 
     yield {
         "execution_id": execution_id,
@@ -271,7 +271,7 @@ async def test_reject_checkpoint(async_client: AsyncClient, cp_setup, test_db_ur
 async def test_approve_stage_checkpoint_resumes(
     async_client: AsyncClient, cp_setup, test_db_url: str
 ):
-    """Approve a stage checkpoint (not final_review) → execution becomes running."""
+    """Approve a stage checkpoint (not final_review) â†’ execution becomes running."""
     exc_id = cp_setup["execution_id"]
     stage_cp_id = cp_setup["stage_cp_id"]
 

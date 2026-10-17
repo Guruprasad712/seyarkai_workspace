@@ -7,6 +7,8 @@ import { apiFetch, ApiError, extractPublishFailures } from "@/lib/api"
 import { GlassCard } from "@/components/glass-card"
 import { BigButton } from "@/components/big-button"
 import { InlineLoader } from "@/components/loader"
+import { useAuth } from "@/components/auth-provider"
+import { can } from "@/lib/permissions"
 import type {
   Agent,
   AgentSummary,
@@ -428,6 +430,7 @@ export default function PolicyEditorPage({
   const searchParams = useSearchParams()
   const projectId = searchParams.get("projectId")
   const wiId      = searchParams.get("wiId")
+  const { user } = useAuth()
 
   const [policy, setPolicy]           = useState<PolicyOut | null>(null)
   const [agentVersionMap, setAgentVersionMap] = useState<AgentVersionMap>({})
@@ -447,7 +450,7 @@ export default function PolicyEditorPage({
       const [pol, summaries, activeUsers] = await Promise.all([
         apiFetch<PolicyOut>(`/policies/${policyId}`),
         apiFetch<AgentSummary[]>("/agents"),
-        apiFetch<User[]>("/users"),
+        apiFetch<User[]>(wiId ? `/users/directory?eligible_for=${wiId}` : "/users/directory"),
       ])
       const details = await Promise.all(summaries.map((s) => apiFetch<Agent>(`/agents/${s.id}`)))
       const vmap: AgentVersionMap = {}
@@ -514,7 +517,7 @@ export default function PolicyEditorPage({
     )
   }
 
-  const readonly = policy.status === "published"
+  const readonly = policy.status === "published" || !can.editPolicy(user?.role ?? "")
   const stages   = sortedStages(policy.stages)
   const finalReviewCheckpoint = policy.checkpoints.find((cp) => cp.type === "final_review")
   const backHref = projectId && wiId ? `/projects/${projectId}/work-items/${wiId}` : "/projects"
@@ -527,20 +530,23 @@ export default function PolicyEditorPage({
         <Link href={backHref} className="text-sm text-white/45 hover:text-white transition-colors">
           ← Work item
         </Link>
-        <div className="flex flex-1 items-center gap-3">
-          <span className="font-heading font-semibold text-white">Policy v{policy.version}</span>
-          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
-            policy.status === "published" ? "bg-[#22C55E]/15 text-[#22C55E]" : "bg-white/10 text-white/55"
-          }`}>
-            {policy.status}
-          </span>
-          {policy.published_at && (
-            <span className="font-mono text-xs text-white/30">
-              Published {new Date(policy.published_at).toLocaleDateString()}
+        <div className="flex flex-1 flex-col gap-0.5">
+          <div className="flex items-center gap-3">
+            <span className="font-heading font-semibold text-white">Policy v{policy.version}</span>
+            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
+              policy.status === "published" ? "bg-[#22C55E]/15 text-[#22C55E]" : "bg-white/10 text-white/55"
+            }`}>
+              {policy.status}
             </span>
-          )}
+            {policy.published_at && (
+              <span className="font-mono text-xs text-white/30">
+                Published {new Date(policy.published_at).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-white/40">You draw the line: where AI runs, where a human must say yes.</p>
         </div>
-        {!readonly && (
+        {policy.status !== "published" && can.publishPolicy(user?.role ?? "") && (
           <BigButton variant="gradient" size="md" loading={publishing} onClick={handlePublish}>
             Publish
           </BigButton>

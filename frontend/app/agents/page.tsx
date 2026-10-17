@@ -7,9 +7,13 @@ import { GlassCard } from "@/components/glass-card"
 import { BigButton } from "@/components/big-button"
 import { StatusPill } from "@/components/status-pill"
 import { InlineLoader } from "@/components/loader"
+import { useAuth } from "@/components/auth-provider"
+import { can } from "@/lib/permissions"
 import type { AgentSummary } from "@/lib/types"
 
 export default function AgentsPage() {
+  const { user } = useAuth()
+  const canEdit = can.editAgents(user?.role ?? "")
   const [agents, setAgents]   = useState<AgentSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState("")
@@ -29,11 +33,13 @@ export default function AgentsPage() {
         <div className="mb-8 flex items-start justify-between gap-4">
           <div>
             <h1 className="font-heading text-4xl font-black text-white">Agent Library</h1>
-            <p className="mt-1.5 text-white/50">Manage AI agents and their published versions.</p>
+            <p className="mt-1.5 text-white/50">AI teammates you build once and reuse anywhere.</p>
           </div>
-          <Link href="/agents/new">
-            <BigButton variant="gradient" size="md">+ New Agent</BigButton>
-          </Link>
+          {canEdit && (
+            <Link href="/agents/new">
+              <BigButton variant="gradient" size="md">+ New Agent</BigButton>
+            </Link>
+          )}
         </div>
 
         {loading && <InlineLoader label="Loading agents…" />}
@@ -47,9 +53,11 @@ export default function AgentsPage() {
         {!loading && !error && agents.length === 0 && (
           <GlassCard className="text-center py-12">
             <p className="text-white/40 mb-4">No agents yet.</p>
-            <Link href="/agents/new">
-              <BigButton variant="ghost" size="md">Create your first agent</BigButton>
-            </Link>
+            {canEdit && (
+              <Link href="/agents/new">
+                <BigButton variant="ghost" size="md">Create your first agent</BigButton>
+              </Link>
+            )}
           </GlassCard>
         )}
 

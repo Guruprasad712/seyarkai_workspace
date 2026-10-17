@@ -1,4 +1,4 @@
-"""Projects + work items tests — all offline (no Vertex AI calls)."""
+﻿"""Projects + work items tests â€” all offline (no Vertex AI calls)."""
 from __future__ import annotations
 
 import contextlib
@@ -39,13 +39,13 @@ async def auth_headers(test_db_url: str, async_client: AsyncClient):
         await db.execute(
             text(
                 "INSERT INTO users (id, email, name, hashed_password, role, status, created_at, updated_at) "
-                "VALUES (:id, :email, :name, :hp, 'member', 'active', now(), now())"
+                "VALUES (:id, :email, :name, :hp, 'admin', 'active', now(), now())"
             ),
             {"id": user_id, "email": "projects_test@example.com", "name": "Test", "hp": hash_password("pw")},
         )
         await db.commit()
 
-    token = create_access_token(user_id, "member")
+    token = create_access_token(user_id, "admin")
     yield {"Authorization": f"Bearer {token}", "_user_id": user_id}
 
     async with _test_db(test_db_url) as db:
@@ -90,7 +90,7 @@ async def created_project(test_db_url: str, auth_headers):
     yield {"id": project_id, "name": project_name, "user_id": user_id}
 
     async with _test_db(test_db_url) as db:
-        # cascade: workers → work_items → project
+        # cascade: workers â†’ work_items â†’ project
         await db.execute(
             text(
                 "DELETE FROM work_item_workers WHERE work_item_id IN "
@@ -168,7 +168,7 @@ async def inactive_user(test_db_url: str):
         await db.execute(
             text(
                 "INSERT INTO users (id, email, name, hashed_password, role, status, created_at, updated_at) "
-                "VALUES (:id, :email, 'Inactive', :hp, 'member', 'inactive', now(), now())"
+                "VALUES (:id, :email, 'Inactive', :hp, 'admin', 'inactive', now(), now())"
             ),
             {"id": user_id, "email": f"inactive_{user_id[:8]}@example.com", "hp": hash_password("pw")},
         )
@@ -258,7 +258,7 @@ async def test_patch_project_duplicate_name(async_client: AsyncClient, auth_head
     r = await async_client.post("/projects", json={"name": other_name}, headers=auth_headers)
     assert r.status_code == 201
 
-    # Rename created_project to other_name → conflict
+    # Rename created_project to other_name â†’ conflict
     r = await async_client.patch(
         f"/projects/{created_project['id']}",
         json={"name": other_name},
@@ -427,7 +427,7 @@ async def test_create_work_item_same_name_different_projects(
         f"/projects/{proj2_id}/work-items", json=body, headers=auth_headers
     )
     assert r1.status_code == 201
-    assert r2.status_code == 201  # different project → no conflict
+    assert r2.status_code == 201  # different project â†’ no conflict
 
 
 @pytest.mark.asyncio

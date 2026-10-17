@@ -1,4 +1,4 @@
-"""GET /executions/{id}/events endpoint tests — all offline."""
+﻿"""GET /executions/{id}/events endpoint tests â€” all offline."""
 from __future__ import annotations
 
 import contextlib
@@ -57,7 +57,7 @@ async def ev_setup(test_db_url: str):
         await db.execute(
             text(
                 "INSERT INTO users (id, email, name, hashed_password, role, status, created_at, updated_at) "
-                "VALUES (:id, :email, 'Events User', :hp, 'member', 'active', now(), now())"
+                "VALUES (:id, :email, 'Events User', :hp, 'admin', 'active', now(), now())"
             ),
             {"id": user_id, "email": f"ev_test_{user_id[:8]}@example.com", "hp": hash_password("pw")},
         )
@@ -150,7 +150,7 @@ async def ev_setup(test_db_url: str):
         )
         await db.commit()
 
-    token = create_access_token(user_id, "member")
+    token = create_access_token(user_id, "admin")
     yield {
         "exec_id": exec_id,
         "stage_id": stage_id,

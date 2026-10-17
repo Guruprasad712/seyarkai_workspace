@@ -9,7 +9,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.models import AgentVersion
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_any
 from app.auth.models import User
 from app.core.config import settings
 from app.core.db import get_db
@@ -110,13 +110,18 @@ async def _assert_human_worker(db: AsyncSession, work_item_id: str, user_id: str
             status_code=422,
             detail=f"user {user_id} is not a human worker on this work item",
         )
-    # Also verify user is still active
+    # Also verify user is still active and has an eligible role
     user_result = await db.execute(select(User).where(User.id == user_id))
     user = user_result.scalar_one_or_none()
     if user is None or user.status != "active":
         raise HTTPException(
             status_code=422,
             detail=f"user {user_id} is not active",
+        )
+    if user.role not in ("admin", "reviewer"):
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "assignee_role_invalid", "message": f"user {user_id} must have role admin or reviewer to be a checkpoint assignee"},
         )
 
 
@@ -147,7 +152,7 @@ async def _assert_stage_in_policy(db: AsyncSession, policy_id: str, stage_id: st
 async def create_policy(
     work_item_id: str,
     body: CreatePolicyRequest,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     wi_result = await db.execute(select(WorkItem).where(WorkItem.id == work_item_id))
@@ -331,7 +336,7 @@ def _validate_generation(result: GenerationResult, ai_worker_ids: set[str], huma
 )
 async def generate_policy(
     work_item_id: str,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     wi_result = await db.execute(select(WorkItem).where(WorkItem.id == work_item_id))
@@ -345,8 +350,12 @@ async def generate_policy(
             Policy.status == "draft",
         )
     )
-    if draft_result.scalar_one_or_none() is not None:
-        raise _DRAFT_EXISTS
+    existing_draft = draft_result.scalar_one_or_none()
+    if existing_draft is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "draft_exists", "policy_id": str(existing_draft.id)},
+        )
 
     # Load all workers on this work item
     workers_result = await db.execute(
@@ -521,7 +530,7 @@ async def get_policy(
 async def add_stage(
     policy_id: str,
     body: CreateStageRequest,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     policy = await _load_policy(db, policy_id)
@@ -556,7 +565,7 @@ async def patch_stage(
     policy_id: str,
     stage_id: str,
     body: PatchStageRequest,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     policy = await _load_policy(db, policy_id)
@@ -594,7 +603,7 @@ async def patch_stage(
 async def delete_stage(
     policy_id: str,
     stage_id: str,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     policy = await _load_policy(db, policy_id)
@@ -629,7 +638,7 @@ async def delete_stage(
 async def reorder_stages(
     policy_id: str,
     body: ReorderStagesRequest,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     policy = await _load_policy(db, policy_id)
@@ -668,7 +677,7 @@ async def reorder_stages(
 async def add_checkpoint(
     policy_id: str,
     body: CreateCheckpointRequest,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     policy = await _load_policy(db, policy_id)
@@ -707,7 +716,7 @@ async def patch_checkpoint(
     policy_id: str,
     checkpoint_id: str,
     body: PatchCheckpointRequest,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     policy = await _load_policy(db, policy_id)
@@ -750,7 +759,7 @@ async def patch_checkpoint(
 async def delete_checkpoint(
     policy_id: str,
     checkpoint_id: str,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     policy = await _load_policy(db, policy_id)
@@ -777,7 +786,7 @@ async def delete_checkpoint(
 @router.post("/policies/{policy_id}/publish", response_model=PolicyOut)
 async def publish_policy(
     policy_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any("admin", "builder", "reviewer")),
     db: AsyncSession = Depends(get_db),
 ):
     policy = await _load_policy(db, policy_id)

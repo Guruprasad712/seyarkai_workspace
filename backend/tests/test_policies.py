@@ -1,4 +1,4 @@
-"""Policy engine tests — all offline (no Vertex AI calls)."""
+﻿"""Policy engine tests â€” all offline (no Vertex AI calls)."""
 from __future__ import annotations
 
 import contextlib
@@ -39,13 +39,13 @@ async def auth_headers(test_db_url: str, async_client: AsyncClient):
         await db.execute(
             text(
                 "INSERT INTO users (id, email, name, hashed_password, role, status, created_at, updated_at) "
-                "VALUES (:id, :email, :name, :hp, 'member', 'active', now(), now())"
+                "VALUES (:id, :email, :name, :hp, 'admin', 'active', now(), now())"
             ),
             {"id": user_id, "email": f"policy_test_{user_id[:8]}@example.com", "name": "Policy Test", "hp": hash_password("pw")},
         )
         await db.commit()
 
-    token = create_access_token(user_id, "member")
+    token = create_access_token(user_id, "admin")
     yield {"Authorization": f"Bearer {token}", "_user_id": user_id}
 
     async with _test_db(test_db_url) as db:
@@ -484,7 +484,7 @@ async def test_add_checkpoint_non_human_worker_fails(
         await db.execute(
             text(
                 "INSERT INTO users (id, email, name, hashed_password, role, status, created_at, updated_at) "
-                "VALUES (:id, :email, 'Other', :hp, 'member', 'active', now(), now())"
+                "VALUES (:id, :email, 'Other', :hp, 'admin', 'active', now(), now())"
             ),
             {"id": other_id, "email": f"other_{other_id[:8]}@example.com", "hp": hash_password("pw")},
         )
@@ -627,7 +627,7 @@ async def test_publish_policy_missing_final_review(
 async def test_publish_policy_stage_agent_not_worker(
     async_client: AsyncClient, auth_headers, created_work_item, test_db_url
 ):
-    """Stage using an agent version NOT assigned to the work item → publish fails."""
+    """Stage using an agent version NOT assigned to the work item â†’ publish fails."""
     other_agent_id = str(uuid.uuid4())
     other_version_id = str(uuid.uuid4())
     async with _test_db(test_db_url) as db:
@@ -755,7 +755,7 @@ async def test_generate_policy_timeout(
 async def test_generate_policy_bad_worker_ref(
     async_client: AsyncClient, auth_headers, created_work_item, monkeypatch
 ):
-    """LLM returns valid JSON but with a worker_ref that doesn't exist → 422."""
+    """LLM returns valid JSON but with a worker_ref that doesn't exist â†’ 422."""
     import json as _json
 
     def _mock(*args, **kwargs):
@@ -788,7 +788,7 @@ async def test_generate_policy_bad_worker_ref(
 async def test_generate_policy_missing_final_review(
     async_client: AsyncClient, auth_headers, created_work_item, monkeypatch, test_db_url
 ):
-    """LLM returns valid stages but no final_review checkpoint → 422."""
+    """LLM returns valid stages but no final_review checkpoint â†’ 422."""
     import json as _json
 
     ids = await _get_worker_ids(created_work_item["id"], test_db_url)
@@ -820,7 +820,7 @@ async def test_generate_policy_missing_final_review(
 async def test_generate_policy_multiple_failures(
     async_client: AsyncClient, auth_headers, created_work_item, monkeypatch
 ):
-    """Bad worker_ref + no final_review → both failures collected."""
+    """Bad worker_ref + no final_review â†’ both failures collected."""
     import json as _json
 
     def _mock(*args, **kwargs):
@@ -868,7 +868,7 @@ async def test_generate_policy_draft_exists(
 async def test_generate_policy_success_mock(
     async_client: AsyncClient, auth_headers, created_work_item, monkeypatch, test_db_url
 ):
-    """Happy path with a mocked run_stage — creates draft policy, generated_by=llm."""
+    """Happy path with a mocked run_stage â€” creates draft policy, generated_by=llm."""
     ids = await _get_worker_ids(created_work_item["id"], test_db_url)
 
     def _mock(*args, **kwargs):
@@ -898,7 +898,7 @@ async def test_generate_policy_success_mock(
 async def test_generate_policy_live(
     async_client: AsyncClient, auth_headers, created_work_item
 ):
-    """Real Gemini call — requires GOOGLE_GENAI_USE_VERTEXAI + ADC."""
+    """Real Gemini call â€” requires GOOGLE_GENAI_USE_VERTEXAI + ADC."""
     r = await async_client.post(
         f"/work-items/{created_work_item['id']}/policies/generate",
         headers=auth_headers,

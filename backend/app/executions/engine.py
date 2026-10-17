@@ -27,32 +27,49 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-_SUMMARY_PROMPT = (
-    "Summarize your work in this stage.\n"
-    "Include: what you were asked to do, what you actually did, tools you used and their "
-    "results, any issues or blockers, and your recommendation (ready for approval or needs "
-    "changes). Be clear and concise — speak as a coworker explaining to your manager."
-)
-
-
-async def _call_summary_stage(
-    agent_definition: dict,
-    tool_names: list[str],
-    timeout_seconds: float,
+async def _collect_stage_summary(
+    db: AsyncSession,
+    execution_id: str,
+    stage_id: str | None,
 ) -> str | None:
-    try:
-        async for event in run_stage(
-            agent_definition,
-            _SUMMARY_PROMPT,
-            tool_names,
-            max_llm_calls=1,
-            timeout_seconds=timeout_seconds,
-        ):
-            if event["event_type"] == "stage.stream_end":
-                return event["payload"].get("final_text") or None
-    except StageError:
-        pass
-    return None
+    """Build a summary from agent.message events already persisted for the stage.
+
+    Avoids launching MCP subprocesses — reads what the agent already produced.
+    For a final-review (stage_id=None) collects across all stages of this execution.
+    """
+    if stage_id is not None:
+        stmt = (
+            select(ExecutionEvent)
+            .where(
+                ExecutionEvent.execution_id == execution_id,
+                ExecutionEvent.stage_id == stage_id,
+                ExecutionEvent.event_type == "agent.message",
+            )
+            .order_by(ExecutionEvent.created_at)
+        )
+    else:
+        stmt = (
+            select(ExecutionEvent)
+            .where(
+                ExecutionEvent.execution_id == execution_id,
+                ExecutionEvent.event_type == "agent.message",
+            )
+            .order_by(ExecutionEvent.created_at)
+        )
+    result = await db.execute(stmt)
+    events = result.scalars().all()
+    if not events:
+        return None
+    parts: list[str] = []
+    for ev in events:
+        p = ev.payload or {}
+        text = (p.get("text") or p.get("preview") or "").strip()
+        if text:
+            parts.append(text)
+    if not parts:
+        return None
+    # Return the last message as the summary (it's the agent's final output)
+    return parts[-1]
 
 
 async def _persist_event(
@@ -167,6 +184,7 @@ class ExecutionEngine:
         # Retained after loop to reuse for final-review summary
         last_agent_definition: dict = {}
         last_tool_names: list[str] = []
+        last_tool_server_map: dict[str, str] = {}
 
         try:
             # --------------------------------------------------------------
@@ -196,6 +214,7 @@ class ExecutionEngine:
                 )
                 tools = list(result.scalars().all())
                 tool_names = [t.tool_name for t in tools]
+                tool_server_map = {t.tool_name: t.server_key for t in tools}
 
                 agent_definition = {
                     "name": agent_name,
@@ -204,6 +223,7 @@ class ExecutionEngine:
                 }
                 last_agent_definition = agent_definition
                 last_tool_names = tool_names
+                last_tool_server_map = tool_server_map
 
                 await _persist_event(
                     db, execution_id, sid,
@@ -301,6 +321,7 @@ class ExecutionEngine:
                     task_text,
                     tool_names,
                     timeout_seconds=settings.STAGE_TIMEOUT_SECONDS,
+                    tool_server_map=tool_server_map,
                 ):
                     if event["event_type"] == "stage.stream_end":
                         # Persist stage output as a message
@@ -328,23 +349,29 @@ class ExecutionEngine:
                         structured = event["payload"].get("structured_result")
                         if isinstance(structured, dict):
                             doc_id = structured.get("document_id", "")
-                            url = structured.get("url", "")
                             artifact_type = "html" if doc_id.startswith("html-") else "google_doc"
+                            artifact_row_id = uuid.uuid4()
+                            if artifact_type == "html":
+                                # URL is the authenticated serve path using the DB row id
+                                url = f"/artifacts/{artifact_row_id}"
+                            else:
+                                url = structured.get("url", "")
                             artifact_name = f"{stage.name} — {doc_id}"
                             artifact = Artifact(
-                                id=uuid.uuid4(),
+                                id=artifact_row_id,
                                 execution_id=execution_id,
                                 stage_id=stage.id,
                                 name=artifact_name,
                                 type=artifact_type,
                                 url=url,
+                                html_content=event["payload"].get("_html_content") if artifact_type == "html" else None,
                                 created_at=_now(),
                             )
                             db.add(artifact)
                             await _persist_event(
                                 db, execution_id, sid,
                                 "artifact.created", "agent",
-                                {"artifact_id": str(artifact.id), "name": artifact_name, "url": url},
+                                {"artifact_id": str(artifact_row_id), "name": artifact_name, "url": url},
                             )
                             await db.commit()
                         # Fall through — also persist the tool.result event below
@@ -352,10 +379,12 @@ class ExecutionEngine:
                     # Persist the contract event; strip internal keys, truncate agent.message
                     payload = event["payload"]
                     if event["event_type"] == "tool.result":
-                        # structured_result is engine-internal — never stored in DB
-                        payload = {k: v for k, v in payload.items() if k != "structured_result"}
+                        # structured_result and _html_content are engine-internal — never stored in DB
+                        payload = {k: v for k, v in payload.items()
+                                   if k not in ("structured_result", "_html_content")}
                     elif event["event_type"] == "agent.message":
-                        payload = {"preview": event["payload"].get("text", "")[:500]}
+                        full = event["payload"].get("text", "")
+                        payload = {"text": full, "preview": full[:200]}
 
                     await _persist_event(
                         db, execution_id, sid,
@@ -374,10 +403,8 @@ class ExecutionEngine:
                 # Check for a checkpoint on this stage
                 cp = checkpoint_by_stage.get(sid)
                 if cp is not None:
-                    # Collect agent summary before pausing (best-effort)
-                    summary_text = await _call_summary_stage(
-                        agent_definition, tool_names, settings.STAGE_TIMEOUT_SECONDS
-                    )
+                    # Collect agent summary from already-persisted messages (no new subprocess)
+                    summary_text = await _collect_stage_summary(db, execution_id, sid)
                     execution.pending_summary = summary_text
                     if summary_text:
                         await _persist_event(
@@ -411,13 +438,10 @@ class ExecutionEngine:
             # --------------------------------------------------------------
             now = _now()
             if final_review_checkpoint is not None:
-                # Collect agent summary before final-review pause (best-effort)
-                if last_agent_definition:
-                    summary_text = await _call_summary_stage(
-                        last_agent_definition, last_tool_names, settings.STAGE_TIMEOUT_SECONDS
-                    )
-                    execution.pending_summary = summary_text
-                    if summary_text:
+                # Collect agent summary from already-persisted messages (no new subprocess)
+                summary_text = await _collect_stage_summary(db, execution_id, None)
+                execution.pending_summary = summary_text
+                if summary_text:
                         await _persist_event(
                             db, execution_id, None,
                             "agent.summary", "agent",

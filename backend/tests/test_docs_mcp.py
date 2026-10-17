@@ -69,10 +69,9 @@ async def test_generate_document_returns_doc_id_and_url(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_generate_document_fallback_when_no_sa_email(monkeypatch, tmp_path):
-    """When DOCS_SERVICE_ACCOUNT_EMAIL is empty, tool falls back to HTML."""
+async def test_generate_document_fallback_when_no_sa_email(monkeypatch):
+    """When DOCS_SERVICE_ACCOUNT_EMAIL is empty, tool falls back to HTML inline."""
     monkeypatch.setattr(srv.settings, "DOCS_SERVICE_ACCOUNT_EMAIL", "")
-    monkeypatch.setattr(srv, "_ARTIFACTS_DIR", tmp_path)
 
     async with Client(srv.mcp) as client:
         result = await client.call_tool(
@@ -82,18 +81,16 @@ async def test_generate_document_fallback_when_no_sa_email(monkeypatch, tmp_path
 
     sc = result.structured_content
     assert sc["document_id"].startswith("html-")
-    assert "/artifacts/" in sc["url"]
-    # File must exist
-    filename = sc["document_id"].removeprefix("html-") + ".html"
-    assert (tmp_path / filename).exists()
+    # html_content is returned inline; no url or filesystem write
+    assert "html_content" in sc
+    assert "Fallback Doc" in sc["html_content"]
 
 
 @pytest.mark.asyncio
-async def test_generate_document_fallback_on_api_error(monkeypatch, tmp_path):
-    """When the Docs API raises, the tool falls back to HTML silently."""
+async def test_generate_document_fallback_on_api_error(monkeypatch):
+    """When the Docs API raises, the tool falls back to HTML inline."""
     monkeypatch.setattr(srv.settings, "DOCS_SERVICE_ACCOUNT_EMAIL", "sa@example.iam.gserviceaccount.com")
     monkeypatch.setattr(srv.settings, "GOOGLE_CLOUD_PROJECT", "test-project")
-    monkeypatch.setattr(srv, "_ARTIFACTS_DIR", tmp_path)
 
     with patch("app.mcp_servers.docs.server._create_google_doc",
                side_effect=Exception("API error")):
@@ -105,7 +102,7 @@ async def test_generate_document_fallback_on_api_error(monkeypatch, tmp_path):
 
     sc = result.structured_content
     assert sc["document_id"].startswith("html-")
-    assert "/artifacts/" in sc["url"]
+    assert "html_content" in sc
 
 
 @pytest.mark.asyncio
@@ -137,16 +134,13 @@ async def test_generate_document_calls_share(monkeypatch):
     assert body["role"] == "reader"
 
 
-def test_html_fallback_creates_file(tmp_path, monkeypatch):
-    """_html_fallback writes an HTML file containing the title."""
-    monkeypatch.setattr(srv, "_ARTIFACTS_DIR", tmp_path)
+def test_html_fallback_returns_content():
+    """_html_fallback returns html_content inline (no filesystem write)."""
     result = _html_fallback("My Report", "# Section\n\nContent here.")
 
     assert result["document_id"].startswith("html-")
-    assert "/artifacts/" in result["url"]
-
-    filename = result["document_id"].removeprefix("html-") + ".html"
-    html = (tmp_path / filename).read_text(encoding="utf-8")
+    assert "html_content" in result
+    html = result["html_content"]
     assert "My Report" in html
     assert "Section" in html
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Sora, DM_Sans, JetBrains_Mono, Noto_Sans_Tamil } from "next/font/google"
 import { AuthProvider } from "@/components/auth-provider"
 import { AppShell } from "@/components/app-shell"
+import { ForbiddenToast } from "@/components/forbidden-toast"
 import "./globals.css"
 
 const sora = Sora({
@@ -29,8 +30,8 @@ const notoSansTamil = Noto_Sans_Tamil({
 })
 
 export const metadata: Metadata = {
-  title: "Seyarkai",
-  description: "Governed AI Execution Workspace",
+  title: "Seyarkai: co-op mode for AI work. Your team and your agents on the same task, with humans approving every checkpoint.",
+  description: "Co-op mode for AI work. Your team and your agents on the same task, with humans approving every checkpoint.",
 }
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <AuthProvider>
           <AppShell />
+          <ForbiddenToast />
           <main className="flex-1">{children}</main>
         </AuthProvider>
       </body>

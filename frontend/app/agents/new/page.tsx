@@ -7,6 +7,8 @@ import { Plus, Trash2 } from "lucide-react"
 import { apiFetch, ApiError } from "@/lib/api"
 import { GlassCard } from "@/components/glass-card"
 import { BigButton } from "@/components/big-button"
+import { useAuth } from "@/components/auth-provider"
+import { can } from "@/lib/permissions"
 import type { Agent, Capability, McpTool } from "@/lib/types"
 
 const inputCls =
@@ -32,6 +34,8 @@ function Field({
 
 export default function NewAgentPage() {
   const router = useRouter()
+  const { user } = useAuth()
+  const canEdit = can.editAgents(user?.role ?? "")
 
   const [tools, setTools] = useState<McpTool[]>([])
   const [toolsLoading, setToolsLoading] = useState(true)
@@ -113,6 +117,17 @@ export default function NewAgentPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (user && !canEdit) {
+    return (
+      <div className="min-h-screen bg-[#070A14] flex items-center justify-center">
+        <GlassCard className="max-w-sm w-full text-center py-10">
+          <p className="text-white/60 mb-4">You don&apos;t have permission to create agents.</p>
+          <Link href="/agents"><BigButton variant="ghost" size="md">Back to Agent Library</BigButton></Link>
+        </GlassCard>
+      </div>
+    )
   }
 
   return (

@@ -4,13 +4,13 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.models import Agent, AgentVersion
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_any
 from app.auth.models import User
 from app.core.config import settings
 from app.core.db import get_db
@@ -48,7 +48,7 @@ _TERMINAL_STATUSES = ("completed", "failed")
 async def create_execution(
     work_item_id: str,
     background_tasks: BackgroundTasks,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder", "reviewer")),
     db: AsyncSession = Depends(get_db),
 ):
     # 1. Load work item
@@ -336,8 +336,8 @@ async def list_execution_events(
 # Valid decisions per checkpoint type
 _ALLOWED_DECISIONS: dict[str, set[str]] = {
     "approval": {"approve", "reject"},
-    "review": {"approve", "reject"},
-    "final_review": {"approve", "reject"},
+    "review": {"approve", "reject", "input_provided"},
+    "final_review": {"approve", "reject", "input_provided"},
     "input": {"input_provided"},
 }
 
@@ -380,9 +380,9 @@ async def respond_to_checkpoint(
     if checkpoint is None:
         raise HTTPException(status_code=404, detail="checkpoint not found")
 
-    # 5. Permission: assignee or super_admin
-    if str(checkpoint.assigned_user_id) != str(current_user.id) and current_user.role != "super_admin":
-        raise HTTPException(status_code=403, detail="only the assigned reviewer or a super_admin may respond")
+    # 5. Permission: assignee or admin
+    if str(checkpoint.assigned_user_id) != str(current_user.id) and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="only the assigned reviewer or an admin may respond")
 
     # 6. Validate decision vs checkpoint type (all-failures)
     failures = []
@@ -486,7 +486,11 @@ async def respond_to_checkpoint(
                 select(PolicyStage).where(PolicyStage.id == checkpoint.stage_id)
             )
             owning_stage = result.scalar_one()
-            next_stage_sequence = owning_stage.sequence + 1
+            if body.decision == "input_provided":
+                # Re-run the same stage so the agent can rework based on guidance
+                next_stage_sequence = owning_stage.sequence
+            else:
+                next_stage_sequence = owning_stage.sequence + 1
         else:
             next_stage_sequence = 1
 
@@ -542,7 +546,7 @@ async def respond_to_checkpoint(
 async def send_guidance_message(
     execution_id: str,
     body: GuidanceMessageIn,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any("admin", "builder", "reviewer")),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Execution).where(Execution.id == execution_id))
@@ -769,4 +773,57 @@ async def ask_executor(
         question_message_id=str(q_msg.id),
         answer_message_id=str(a_msg.id),
         answer=answer,
+    )
+
+
+@router.post("/executions/{execution_id}/cancel", status_code=200)
+async def cancel_execution(
+    execution_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Execution).where(Execution.id == execution_id))
+    execution = result.scalar_one_or_none()
+    if execution is None:
+        raise HTTPException(status_code=404, detail="execution not found")
+    if execution.status in ("completed", "failed"):
+        raise HTTPException(status_code=409, detail="execution already terminal")
+
+    now = datetime.now(timezone.utc)
+    execution.status = "failed"
+    execution.error = "cancelled by user"
+    execution.completed_at = now
+    execution.blocking_checkpoint_id = None
+    execution.updated_at = now
+    db.add(ExecutionEvent(
+        id=uuid.uuid4(),
+        execution_id=execution_id,
+        stage_id=None,
+        event_type="execution.failed",
+        actor_type="system",
+        payload={"error": "cancelled by user"},
+        created_at=now,
+    ))
+    await db.commit()
+    return {"status": "failed"}
+
+
+@router.get("/artifacts/{artifact_id}")
+async def get_artifact_content(
+    artifact_id: uuid.UUID,
+    _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Artifact).where(Artifact.id == artifact_id))
+    artifact = result.scalar_one_or_none()
+    if artifact is None or artifact.type != "html" or not artifact.html_content:
+        raise HTTPException(status_code=404, detail="artifact not found")
+    return Response(
+        content=artifact.html_content,
+        media_type="text/html",
+        headers={
+            "Content-Security-Policy": "sandbox",
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-store",
+        },
     )

@@ -1,4 +1,4 @@
-"""ExecutionEngine tests — all offline (no Vertex AI calls).
+﻿"""ExecutionEngine tests â€” all offline (no Vertex AI calls).
 
 run_stage is patched so no ADK / Gemini involvement.
 """
@@ -74,7 +74,7 @@ async def engine_setup(test_db_url: str):
         await db.execute(
             text(
                 "INSERT INTO users (id, email, name, hashed_password, role, status, created_at, updated_at) "
-                "VALUES (:id, :email, 'Engine Test', :hp, 'member', 'active', now(), now())"
+                "VALUES (:id, :email, 'Engine Test', :hp, 'admin', 'active', now(), now())"
             ),
             {"id": user_id, "email": f"eng_{user_id[:8]}@example.com", "hp": hash_password("pw")},
         )
@@ -351,7 +351,7 @@ async def test_engine_stage_error_sets_failed(engine_setup, test_db_url: str):
 
 @pytest.mark.asyncio
 async def test_engine_no_final_review_completes(engine_setup, test_db_url: str):
-    """Policy with no checkpoints at all → execution + work_item both completed."""
+    """Policy with no checkpoints at all â†’ execution + work_item both completed."""
     policy_id = engine_setup["policy_id"]
     checkpoint_id = engine_setup["checkpoint_id"]
     wi_id = engine_setup["work_item_id"]
@@ -410,7 +410,7 @@ async def test_engine_no_final_review_completes(engine_setup, test_db_url: str):
                 text("UPDATE work_items SET status = 'in_progress', updated_at = now() WHERE id = :wid"),
                 {"wid": wi_id},
             )
-            # Restore checkpoint (fixture teardown will try to delete it but it's already gone — OK)
+            # Restore checkpoint (fixture teardown will try to delete it but it's already gone â€” OK)
             await db.commit()
 
 
@@ -444,25 +444,23 @@ async def test_engine_consumes_pending_guidance(engine_setup, test_db_url: str):
 
 @pytest.mark.asyncio
 async def test_engine_collects_summary_before_checkpoint(engine_setup, test_db_url: str):
-    """Engine calls run_stage a second time with a summary prompt, stores pending_summary."""
+    """Engine derives pending_summary from agent.message events (no second run_stage call)."""
     exc_id = engine_setup["execution_id"]
 
     call_count = 0
-    call_prompts: list[str] = []
 
     async def _tracking_mock(agent_def, task_text, tool_names, **kwargs):
         nonlocal call_count
         call_count += 1
-        call_prompts.append(task_text)
-        yield {"event_type": "stage.stream_end", "payload": {"final_text": f"result_{call_count}", "total_tokens": {}}}
+        # Emit an agent.message so the summary extractor has something to read
+        yield {"event_type": "agent.message", "payload": {"text": "Key finding: compliance OK. Recommend proceed."}}
+        yield {"event_type": "stage.stream_end", "payload": {"final_text": "stage done", "total_tokens": {}}}
 
     with patch("app.executions.engine.run_stage", side_effect=_tracking_mock):
         await ExecutionEngine(_make_factory(test_db_url)).run_execution(exc_id)
 
-    # run_stage must be called twice: once for stage work, once for summary
-    assert call_count == 2
-    # Second call must contain "Summarize" to distinguish it from the stage task
-    assert "Summarize" in call_prompts[1]
+    # run_stage is called exactly once — no second call for summary
+    assert call_count == 1
 
     async with _test_db(test_db_url) as db:
         result = await db.execute(
@@ -477,26 +475,22 @@ async def test_engine_collects_summary_before_checkpoint(engine_setup, test_db_u
         )
         summary_events = result2.all()
 
-    assert pending_summary == "result_2"
+    # Summary is the agent.message preview text (truncated at 500 chars on persist)
+    assert pending_summary is not None
+    assert "finding" in pending_summary or "comply" in pending_summary or "proceed" in pending_summary
     assert len(summary_events) == 1
 
 
 @pytest.mark.asyncio
-async def test_engine_summary_error_does_not_block_checkpoint(engine_setup, test_db_url: str):
-    """If the summary call raises StageError, the checkpoint is still triggered."""
-    from app.runtime import StageError
-
+async def test_engine_summary_absent_when_no_agent_messages(engine_setup, test_db_url: str):
+    """If no agent.message events exist, pending_summary stays None but checkpoint still triggers."""
     exc_id = engine_setup["execution_id"]
-    call_count = 0
 
-    async def _summary_fails_mock(agent_def, task_text, tool_names, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 2:
-            raise StageError("summary failed")
-        yield {"event_type": "stage.stream_end", "payload": {"final_text": "stage done", "total_tokens": {}}}
+    async def _silent_mock(agent_def, task_text, tool_names, **kwargs):
+        # No agent.message event — just stage end
+        yield {"event_type": "stage.stream_end", "payload": {"final_text": "done", "total_tokens": {}}}
 
-    with patch("app.executions.engine.run_stage", side_effect=_summary_fails_mock):
+    with patch("app.executions.engine.run_stage", side_effect=_silent_mock):
         await ExecutionEngine(_make_factory(test_db_url)).run_execution(exc_id)
 
     async with _test_db(test_db_url) as db:
@@ -519,7 +513,7 @@ async def test_engine_summary_error_does_not_block_checkpoint(engine_setup, test
 
 @pytest.mark.asyncio
 async def test_engine_artifact_created_on_generate_document(engine_setup, test_db_url: str):
-    """generate_document tool.result with structured_result → artifacts row + artifact.created event."""
+    """generate_document tool.result with structured_result â†’ artifacts row + artifact.created event."""
     exc_id = engine_setup["execution_id"]
     stage_id = engine_setup["stage_id"]
     doc_url = "https://docs.google.com/document/d/google-doc-123/edit"
@@ -563,7 +557,7 @@ async def test_engine_artifact_created_on_generate_document(engine_setup, test_d
 
 @pytest.mark.asyncio
 async def test_engine_artifact_html_fallback_type(engine_setup, test_db_url: str):
-    """generate_document with html- document_id → artifact.type = 'html'."""
+    """generate_document with html- document_id â†’ artifact.type = 'html'."""
     exc_id = engine_setup["execution_id"]
     html_id = f"html-{uuid.uuid4()}"
     html_url = f"http://localhost:8000/artifacts/{html_id.removeprefix('html-')}.html"
