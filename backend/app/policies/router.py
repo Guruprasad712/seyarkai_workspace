@@ -782,7 +782,7 @@ async def delete_checkpoint(
 @router.post("/policies/{policy_id}/publish", response_model=PolicyOut)
 async def publish_policy(
     policy_id: str,
-    current_user: User = Depends(require_any("admin", "reviewer")),
+    current_user: User = Depends(require_any("admin", "builder", "reviewer")),
     db: AsyncSession = Depends(get_db),
 ):
     policy = await _load_policy(db, policy_id)

@@ -5,7 +5,7 @@ export const can = {
   editAgents:    (r: string) => r === "admin" || r === "builder",
   editProjects:  (r: string) => r === "admin" || r === "builder",
   editPolicy:    (r: string) => r === "admin" || r === "builder",
-  publishPolicy: (r: string) => r === "admin" || r === "reviewer",
+  publishPolicy: (r: string) => r === "admin" || r === "builder" || r === "reviewer",
   execute:       (r: string) => r !== "observer",
   sendGuidance:  (r: string) => r !== "observer",
   addKnowledge:  (r: string) => r !== "observer",
