@@ -6,13 +6,21 @@ import { useEffect, useState } from "react"
 import { useAuth } from "@/components/auth-provider"
 import { apiFetch } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { can } from "@/lib/permissions"
 
-const navLinks = [
+const BASE_NAV_LINKS = [
   { href: "/",          label: "Home" },
   { href: "/projects",  label: "Projects" },
   { href: "/knowledge", label: "Knowledge" },
   { href: "/agents",    label: "Agents" },
 ]
+
+const ROLE_PILL_COLORS: Record<string, string> = {
+  admin:    "bg-violet-500/20 text-violet-300 border-violet-500/30",
+  builder:  "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+  reviewer: "bg-teal-500/20 text-teal-300 border-teal-500/30",
+  observer: "bg-white/10 text-white/50 border-white/15",
+}
 
 export function AppShell() {
   const { user, logout } = useAuth()
@@ -30,6 +38,14 @@ export function AppShell() {
   const initials = user?.name
     ? user.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()
     : "?"
+
+  const role = user?.role ?? ""
+  const rolePillClass = ROLE_PILL_COLORS[role] ?? ROLE_PILL_COLORS.observer
+
+  const navLinks = [
+    ...BASE_NAV_LINKS,
+    ...(user && can.manageUsers(role) ? [{ href: "/users", label: "Users" }] : []),
+  ]
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/8 bg-[rgba(7,10,20,0.85)] backdrop-blur-xl">
@@ -79,6 +95,14 @@ export function AppShell() {
         {/* User menu */}
         {user && (
           <div className="flex items-center gap-2">
+            {role && (
+              <span className={cn(
+                "hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-widest border",
+                rolePillClass
+              )}>
+                {role}
+              </span>
+            )}
             <button
               onClick={logout}
               className="flex items-center gap-2 px-3 py-1.5 rounded-xl glass text-sm text-white/70 hover:text-white hover:bg-white/10 transition-all duration-200 cursor-pointer"

@@ -7,6 +7,8 @@ import { GlassCard } from "@/components/glass-card"
 import { BigButton } from "@/components/big-button"
 import { StatusPill } from "@/components/status-pill"
 import { InlineLoader } from "@/components/loader"
+import { useAuth } from "@/components/auth-provider"
+import { can } from "@/lib/permissions"
 import type { Project } from "@/lib/types"
 
 const inputCls =
@@ -94,6 +96,8 @@ function CreateProjectForm({
 }
 
 export default function ProjectsPage() {
+  const { user } = useAuth()
+  const canEdit = can.editProjects(user?.role ?? "")
   const [projects, setProjects]   = useState<Project[]>([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState("")
@@ -122,7 +126,7 @@ export default function ProjectsPage() {
               Manage AI-assisted work items and policy execution.
             </p>
           </div>
-          {!showCreate && (
+          {!showCreate && canEdit && (
             <BigButton variant="gradient" size="md" onClick={() => setShowCreate(true)}>
               + New Project
             </BigButton>
@@ -147,9 +151,11 @@ export default function ProjectsPage() {
         {!loading && !error && projects.length === 0 && (
           <GlassCard className="text-center py-12">
             <p className="text-white/45 mb-4">No projects yet.</p>
-            <BigButton variant="ghost" size="md" onClick={() => setShowCreate(true)}>
-              Create your first project
-            </BigButton>
+            {canEdit && (
+              <BigButton variant="ghost" size="md" onClick={() => setShowCreate(true)}>
+                Create your first project
+              </BigButton>
+            )}
           </GlassCard>
         )}
 
@@ -184,13 +190,15 @@ export default function ProjectsPage() {
             ))}
 
             {/* Dashed placeholder */}
-            <div
-              className="flex flex-col items-center justify-center rounded-[var(--radius-xl)] border-2 border-dashed border-white/15 px-6 py-10 cursor-pointer hover:border-white/30 hover:bg-white/3 transition-all duration-200 min-h-[200px]"
-              onClick={() => setShowCreate(true)}
-            >
-              <span className="text-3xl text-white/20 mb-2">+</span>
-              <p className="text-sm text-white/35 font-medium">New project</p>
-            </div>
+            {canEdit && (
+              <div
+                className="flex flex-col items-center justify-center rounded-[var(--radius-xl)] border-2 border-dashed border-white/15 px-6 py-10 cursor-pointer hover:border-white/30 hover:bg-white/3 transition-all duration-200 min-h-[200px]"
+                onClick={() => setShowCreate(true)}
+              >
+                <span className="text-3xl text-white/20 mb-2">+</span>
+                <p className="text-sm text-white/35 font-medium">New project</p>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -8,6 +8,8 @@ import { GlassCard } from "@/components/glass-card"
 import { BigButton } from "@/components/big-button"
 import { StatusPill } from "@/components/status-pill"
 import { InlineLoader } from "@/components/loader"
+import { useAuth } from "@/components/auth-provider"
+import { can } from "@/lib/permissions"
 import type { ExecutionOut, PolicyOut, WorkItem } from "@/lib/types"
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -39,6 +41,9 @@ export default function WorkItemDetailPage({
 }) {
   const { id: projectId, wiId } = use(params)
   const router = useRouter()
+  const { user } = useAuth()
+  const canEditPolicy = can.editPolicy(user?.role ?? "")
+  const canExecute = can.execute(user?.role ?? "")
 
   const [workItem, setWorkItem]           = useState<WorkItem | null>(null)
   const [loading, setLoading]             = useState(true)
@@ -188,12 +193,12 @@ export default function WorkItemDetailPage({
 
           {/* Actions */}
           <div className="flex shrink-0 flex-col items-end gap-2">
-            {hasAiWorker && (
+            {hasAiWorker && canEditPolicy && (
               <BigButton variant="ghost" size="md" loading={generating} onClick={handleGeneratePolicy}>
                 ✦ Generate Policy
               </BigButton>
             )}
-            {workItem.status !== "completed" && (
+            {workItem.status !== "completed" && canExecute && (
               <BigButton variant="gradient" size="md" loading={executing} onClick={handleExecute}>
                 ▶ Execute
               </BigButton>

@@ -7,6 +7,8 @@ import { apiFetch, ApiError, extractPublishFailures } from "@/lib/api"
 import { GlassCard } from "@/components/glass-card"
 import { BigButton } from "@/components/big-button"
 import { InlineLoader } from "@/components/loader"
+import { useAuth } from "@/components/auth-provider"
+import { can } from "@/lib/permissions"
 import type {
   Agent,
   AgentSummary,
@@ -428,6 +430,7 @@ export default function PolicyEditorPage({
   const searchParams = useSearchParams()
   const projectId = searchParams.get("projectId")
   const wiId      = searchParams.get("wiId")
+  const { user } = useAuth()
 
   const [policy, setPolicy]           = useState<PolicyOut | null>(null)
   const [agentVersionMap, setAgentVersionMap] = useState<AgentVersionMap>({})
@@ -447,7 +450,7 @@ export default function PolicyEditorPage({
       const [pol, summaries, activeUsers] = await Promise.all([
         apiFetch<PolicyOut>(`/policies/${policyId}`),
         apiFetch<AgentSummary[]>("/agents"),
-        apiFetch<User[]>("/users"),
+        apiFetch<User[]>(wiId ? `/users/directory?eligible_for=${wiId}` : "/users/directory"),
       ])
       const details = await Promise.all(summaries.map((s) => apiFetch<Agent>(`/agents/${s.id}`)))
       const vmap: AgentVersionMap = {}
@@ -514,7 +517,7 @@ export default function PolicyEditorPage({
     )
   }
 
-  const readonly = policy.status === "published"
+  const readonly = policy.status === "published" || !can.editPolicy(user?.role ?? "")
   const stages   = sortedStages(policy.stages)
   const finalReviewCheckpoint = policy.checkpoints.find((cp) => cp.type === "final_review")
   const backHref = projectId && wiId ? `/projects/${projectId}/work-items/${wiId}` : "/projects"
@@ -540,7 +543,7 @@ export default function PolicyEditorPage({
             </span>
           )}
         </div>
-        {!readonly && (
+        {policy.status !== "published" && can.publishPolicy(user?.role ?? "") && (
           <BigButton variant="gradient" size="md" loading={publishing} onClick={handlePublish}>
             Publish
           </BigButton>

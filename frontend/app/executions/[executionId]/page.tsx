@@ -5,6 +5,7 @@ import Link from "next/link"
 import { motion } from "motion/react"
 import { apiFetch, ApiError } from "@/lib/api"
 import { useAuth } from "@/components/auth-provider"
+import { can } from "@/lib/permissions"
 import { GlassCard } from "@/components/glass-card"
 import { BigButton } from "@/components/big-button"
 import { StatusPill } from "@/components/status-pill"
@@ -488,6 +489,7 @@ function ConversationTab({
   cp,
   isAssignee,
   isTerminal,
+  canGuide,
   onGoToCheckpoints,
   prevLength,
 }: {
@@ -496,6 +498,7 @@ function ConversationTab({
   cp: CheckpointBrief | null
   isAssignee: boolean
   isTerminal: boolean
+  canGuide: boolean
   onGoToCheckpoints: () => void
   prevLength: number
 }) {
@@ -629,7 +632,7 @@ function ConversationTab({
       </div>
 
       {/* Composer */}
-      {!isTerminal && (
+      {!isTerminal && canGuide && (
         <div className="shrink-0 border-t border-white/8 px-4 py-4 bg-[rgba(7,10,20,0.7)] backdrop-blur-md space-y-3">
           {/* Mode toggle */}
           <div className="flex items-center gap-1 w-fit rounded-xl bg-white/6 p-1">
@@ -1065,7 +1068,8 @@ export default function ExecutionWorkspacePage({
   const currentStage = policy?.stages.find((s) => s.id === execution.current_stage_id)
   const totalStages = policy?.stages.length ?? 0
   const cp = execution.blocking_checkpoint
-  const isAssignee = cp !== null && (user?.id === cp.assigned_user_id || user?.role === "super_admin")
+  const isAssignee = cp !== null && (user?.id === cp.assigned_user_id || user?.role === "admin")
+  const canGuide = can.sendGuidance(user?.role ?? "")
   const isTerminal = TERMINAL.has(execution.status)
   const backHref = workItem?.project_id
     ? `/projects/${workItem.project_id}/work-items/${execution.work_item_id}`
@@ -1208,6 +1212,7 @@ export default function ExecutionWorkspacePage({
                 cp={cp}
                 isAssignee={isAssignee}
                 isTerminal={isTerminal}
+                canGuide={canGuide}
                 onGoToCheckpoints={() => setActiveTab("checkpoints")}
                 prevLength={prevEventsLen.current}
               />

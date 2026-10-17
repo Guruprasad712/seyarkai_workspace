@@ -69,6 +69,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       }
     }
 
+    if (res.status === 403 && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("api-forbidden", {
+        detail: extractDetail(body),
+      }))
+    }
+
     throw new ApiError(res.status, extractDetail(body), body)
   }
 

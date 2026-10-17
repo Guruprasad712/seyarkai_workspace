@@ -7,6 +7,8 @@ import { GlassCard } from "@/components/glass-card"
 import { BigButton } from "@/components/big-button"
 import { StatusPill } from "@/components/status-pill"
 import { InlineLoader } from "@/components/loader"
+import { useAuth } from "@/components/auth-provider"
+import { can } from "@/lib/permissions"
 import type { Agent, AgentSummary, Project, User, WorkItem } from "@/lib/types"
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -240,6 +242,8 @@ export default function ProjectDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
+  const { user } = useAuth()
+  const canEdit = can.editProjects(user?.role ?? "")
 
   const [project, setProject]     = useState<Project | null>(null)
   const [workItems, setWorkItems] = useState<WorkItem[]>([])
@@ -306,7 +310,7 @@ export default function ProjectDetailPage({
         <div>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-heading text-2xl font-bold text-white">Work Items</h2>
-            {!showCreateWI && (
+            {!showCreateWI && canEdit && (
               <BigButton variant="gradient" size="md" onClick={() => setShowCreateWI(true)}>
                 + New Work Item
               </BigButton>
@@ -324,9 +328,11 @@ export default function ProjectDetailPage({
           {workItems.length === 0 && !showCreateWI && (
             <GlassCard className="text-center py-10">
               <p className="text-white/40 mb-4">No work items yet.</p>
-              <BigButton variant="ghost" size="md" onClick={() => setShowCreateWI(true)}>
-                Create the first work item
-              </BigButton>
+              {canEdit && (
+                <BigButton variant="ghost" size="md" onClick={() => setShowCreateWI(true)}>
+                  Create the first work item
+                </BigButton>
+              )}
             </GlassCard>
           )}
 
