@@ -373,12 +373,27 @@ async def test_input_provided_requires_input_text(
 
 
 @pytest.mark.asyncio
-async def test_wrong_decision_for_type(async_client: AsyncClient, cp_setup):
+async def test_wrong_decision_for_type(
+    async_client: AsyncClient, cp_setup, test_db_url: str
+):
+    # Temporarily set the stage checkpoint type to "approval" (only allows approve/reject),
+    # then try sending "input_provided" — should be rejected as invalid_decision.
     exc_id = cp_setup["execution_id"]
-    cp_id = cp_setup["final_cp_id"]  # type = final_review, allows approve/reject only
+    stage_cp_id = cp_setup["stage_cp_id"]
+
+    async with _test_db(test_db_url) as db:
+        await db.execute(
+            text("UPDATE checkpoints SET type = 'approval' WHERE id = :cpid"),
+            {"cpid": stage_cp_id},
+        )
+        await db.execute(
+            text("UPDATE executions SET blocking_checkpoint_id = :cpid WHERE id = :eid"),
+            {"cpid": stage_cp_id, "eid": exc_id},
+        )
+        await db.commit()
 
     r = await async_client.post(
-        f"/executions/{exc_id}/checkpoints/{cp_id}/respond",
+        f"/executions/{exc_id}/checkpoints/{stage_cp_id}/respond",
         json={"decision": "input_provided", "input_text": "something"},
         headers=cp_setup["headers_assignee"],
     )
