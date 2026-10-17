@@ -27,36 +27,51 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-_SUMMARY_PROMPT = (
-    "Based on the work you just completed in this stage, provide a structured summary "
-    "for the human reviewer.\n"
-    "Include: 3 key findings from the information you gathered or produced, "
-    "and 1 clear recommendation (approve and proceed, or flag concerns).\n"
-    "Write in plain language as if briefing a colleague. "
-    "Do not describe your own instructions, tools, or process — only what you found and recommend."
-)
-
-
-async def _call_summary_stage(
-    agent_definition: dict,
-    tool_names: list[str],
-    timeout_seconds: float,
-    tool_server_map: dict[str, str] | None = None,
+async def _collect_stage_summary(
+    db: AsyncSession,
+    execution_id: str,
+    stage_id: str | None,
 ) -> str | None:
-    try:
-        async for event in run_stage(
-            agent_definition,
-            _SUMMARY_PROMPT,
-            tool_names,
-            max_llm_calls=1,
-            timeout_seconds=timeout_seconds,
-            tool_server_map=tool_server_map,
-        ):
-            if event["event_type"] == "stage.stream_end":
-                return event["payload"].get("final_text") or None
-    except StageError:
-        pass
-    return None
+    """Build a summary from agent.message events already persisted for the stage.
+
+    Avoids launching MCP subprocesses — reads what the agent already produced.
+    For a final-review (stage_id=None) collects across all stages of this execution.
+    """
+    if stage_id is not None:
+        stmt = (
+            select(ExecutionEvent)
+            .where(
+                ExecutionEvent.execution_id == execution_id,
+                ExecutionEvent.stage_id == stage_id,
+                ExecutionEvent.event_type == "agent.message",
+            )
+            .order_by(ExecutionEvent.created_at)
+        )
+    else:
+        stmt = (
+            select(ExecutionEvent)
+            .where(
+                ExecutionEvent.execution_id == execution_id,
+                ExecutionEvent.event_type == "agent.message",
+            )
+            .order_by(ExecutionEvent.created_at)
+        )
+    result = await db.execute(stmt)
+    events = result.scalars().all()
+    if not events:
+        return None
+    # Each agent.message is stored with payload {"preview": text[:500]}
+    # Use the last message (most likely to be the final output/conclusion)
+    # plus any artifact URLs mentioned
+    parts: list[str] = []
+    for ev in events:
+        text = (ev.payload or {}).get("preview", "").strip()
+        if text:
+            parts.append(text)
+    if not parts:
+        return None
+    # Return the last message as the summary (it's the agent's final output)
+    return parts[-1]
 
 
 async def _persist_event(
@@ -382,11 +397,8 @@ class ExecutionEngine:
                 # Check for a checkpoint on this stage
                 cp = checkpoint_by_stage.get(sid)
                 if cp is not None:
-                    # Collect agent summary before pausing (best-effort)
-                    summary_text = await _call_summary_stage(
-                        agent_definition, tool_names, settings.STAGE_TIMEOUT_SECONDS,
-                        tool_server_map=tool_server_map,
-                    )
+                    # Collect agent summary from already-persisted messages (no new subprocess)
+                    summary_text = await _collect_stage_summary(db, execution_id, sid)
                     execution.pending_summary = summary_text
                     if summary_text:
                         await _persist_event(
@@ -420,14 +432,10 @@ class ExecutionEngine:
             # --------------------------------------------------------------
             now = _now()
             if final_review_checkpoint is not None:
-                # Collect agent summary before final-review pause (best-effort)
-                if last_agent_definition:
-                    summary_text = await _call_summary_stage(
-                        last_agent_definition, last_tool_names, settings.STAGE_TIMEOUT_SECONDS,
-                        tool_server_map=last_tool_server_map,
-                    )
-                    execution.pending_summary = summary_text
-                    if summary_text:
+                # Collect agent summary from already-persisted messages (no new subprocess)
+                summary_text = await _collect_stage_summary(db, execution_id, None)
+                execution.pending_summary = summary_text
+                if summary_text:
                         await _persist_event(
                             db, execution_id, None,
                             "agent.summary", "agent",
