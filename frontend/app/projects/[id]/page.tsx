@@ -51,7 +51,7 @@ function CreateWorkItemForm({ projectId, onCreated, onCancel }: CreateWorkItemFo
   useEffect(() => {
     Promise.all([
       apiFetch<AgentSummary[]>("/agents"),
-      apiFetch<User[]>("/users"),
+      apiFetch<{ id: string; name: string; role: string }[]>("/users/directory"),
     ]).then(async ([summaries, users]) => {
       const details = await Promise.all(
         summaries.map((s) => apiFetch<Agent>(`/agents/${s.id}`))
@@ -66,7 +66,7 @@ function CreateWorkItemForm({ projectId, onCreated, onCancel }: CreateWorkItemFo
       const human: WorkerOption[] = users.map((u) => ({
         kind: "human",
         id: u.id,
-        label: u.name ?? u.email,
+        label: u.name,
       }))
       setAiOptions(ai)
       setHumanOptions(human)
