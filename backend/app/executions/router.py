@@ -336,8 +336,8 @@ async def list_execution_events(
 # Valid decisions per checkpoint type
 _ALLOWED_DECISIONS: dict[str, set[str]] = {
     "approval": {"approve", "reject"},
-    "review": {"approve", "reject"},
-    "final_review": {"approve", "reject"},
+    "review": {"approve", "reject", "input_provided"},
+    "final_review": {"approve", "reject", "input_provided"},
     "input": {"input_provided"},
 }
 
@@ -486,7 +486,11 @@ async def respond_to_checkpoint(
                 select(PolicyStage).where(PolicyStage.id == checkpoint.stage_id)
             )
             owning_stage = result.scalar_one()
-            next_stage_sequence = owning_stage.sequence + 1
+            if body.decision == "input_provided":
+                # Re-run the same stage so the agent can rework based on guidance
+                next_stage_sequence = owning_stage.sequence
+            else:
+                next_stage_sequence = owning_stage.sequence + 1
         else:
             next_stage_sequence = 1
 
@@ -770,6 +774,38 @@ async def ask_executor(
         answer_message_id=str(a_msg.id),
         answer=answer,
     )
+
+
+@router.post("/executions/{execution_id}/cancel", status_code=200)
+async def cancel_execution(
+    execution_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Execution).where(Execution.id == execution_id))
+    execution = result.scalar_one_or_none()
+    if execution is None:
+        raise HTTPException(status_code=404, detail="execution not found")
+    if execution.status in ("completed", "failed"):
+        raise HTTPException(status_code=409, detail="execution already terminal")
+
+    now = datetime.now(timezone.utc)
+    execution.status = "failed"
+    execution.error = "cancelled by user"
+    execution.completed_at = now
+    execution.blocking_checkpoint_id = None
+    execution.updated_at = now
+    db.add(ExecutionEvent(
+        id=uuid.uuid4(),
+        execution_id=execution_id,
+        stage_id=None,
+        event_type="execution.failed",
+        actor_type="system",
+        payload={"error": "cancelled by user"},
+        created_at=now,
+    ))
+    await db.commit()
+    return {"status": "failed"}
 
 
 @router.get("/artifacts/{artifact_id}")

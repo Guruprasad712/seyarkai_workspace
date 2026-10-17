@@ -142,10 +142,12 @@ function CheckpointActions({
   executionId,
   checkpoint,
   onResponse,
+  onRequestChanges,
 }: {
   executionId: string
   checkpoint: CheckpointBrief
   onResponse: (nextAction: string, newStatus: string) => void
+  onRequestChanges?: () => void
 }) {
   const [inputText, setInputText] = useState("")
   const [submitting, setSubmitting] = useState(false)
@@ -167,6 +169,7 @@ function CheckpointActions({
         }
       )
       onResponse(res.next_action, res.status)
+      if (res.next_action === "resume") onRequestChanges?.()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to submit response")
     } finally {
@@ -204,7 +207,7 @@ function CheckpointActions({
           <BigButton variant="gradient" size="sm" loading={submitting} onClick={() => respond("approve")}>
             Complete ✓
           </BigButton>
-          <BigButton variant="ghost" size="sm" disabled={submitting} onClick={() => respond("reject")}>
+          <BigButton variant="ghost" size="sm" disabled={submitting} onClick={() => respond("input_provided", undefined, "Please review and suggest modifications.")}>
             Rework
           </BigButton>
         </div>
@@ -213,7 +216,7 @@ function CheckpointActions({
           <BigButton variant="gradient" size="sm" loading={submitting} onClick={() => respond("approve")}>
             Accept
           </BigButton>
-          <BigButton variant="ghost" size="sm" disabled={submitting} onClick={() => respond("reject")}>
+          <BigButton variant="ghost" size="sm" disabled={submitting} onClick={() => respond("input_provided", undefined, "Please review and suggest modifications.")}>
             Request Changes
           </BigButton>
         </div>
@@ -377,15 +380,15 @@ function ArtifactsTab({ artifacts }: { artifacts: ArtifactOut[] }) {
                   </a>
                 ) : (
                   <div className="mt-auto flex flex-col gap-1.5">
-                    <button
-                      onClick={() => openHtmlDoc(a.id, a.url)}
-                      disabled={htmlLoading === a.id}
+                    <BigButton
+                      variant="primary"
+                      size="sm"
                       className="w-full"
+                      disabled={htmlLoading === a.id}
+                      onClick={() => openHtmlDoc(a.id, a.url)}
                     >
-                      <BigButton variant="primary" size="sm" className="w-full" disabled={htmlLoading === a.id}>
-                        {htmlLoading === a.id ? "Loading…" : "Open document"}
-                      </BigButton>
-                    </button>
+                      {htmlLoading === a.id ? "Loading…" : "Open document"}
+                    </BigButton>
                     {htmlError?.id === a.id && (
                       <p className="text-xs text-red-400">{htmlError.msg}</p>
                     )}
@@ -575,11 +578,11 @@ function ConversationTab({
   onGoToCheckpoints: () => void
   prevLength: number
 }) {
-  const [composerMode, setComposerMode] = useState<"guide" | "ask">("guide")
+  const [composerMode, setComposerMode] = useState<"guide" | "ask">("ask")
   const [text, setText] = useState("")
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
-  const [askResponse, setAskResponse] = useState<string | null>(null)
+  const [askMessages, setAskMessages] = useState<{ q: string; a: string }[]>([])
   const [error, setError] = useState("")
   const bottomRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -587,7 +590,7 @@ function ConversationTab({
 
   // Extract conversation-relevant events
   const convoEvents = events.filter((ev) =>
-    ["agent.message", "stage_output", "human.message", "executor.response", "agent.summary"].includes(ev.event_type)
+    ["agent.message", "human.message", "agent.summary"].includes(ev.event_type)
   )
 
   function handleScroll() {
@@ -606,7 +609,6 @@ function ConversationTab({
     if (!text.trim()) return
     setError("")
     setSending(true)
-    setAskResponse(null)
     try {
       if (composerMode === "guide") {
         await apiFetch(`/executions/${executionId}/messages`, {
@@ -617,11 +619,12 @@ function ConversationTab({
         setSent(true)
         setTimeout(() => setSent(false), 3000)
       } else {
+        const question = text.trim()
         const res = await apiFetch<{ answer: string }>(`/executions/${executionId}/ask`, {
           method: "POST",
-          body: JSON.stringify({ question: text.trim() }),
+          body: JSON.stringify({ question }),
         })
-        setAskResponse(res.answer)
+        setAskMessages((prev) => [...prev, { q: question, a: res.answer }])
         setText("")
       }
     } catch (err) {
@@ -647,8 +650,8 @@ function ConversationTab({
           const isNewItem = i >= prevLength
           const isHuman = ev.event_type === "human.message"
           const isSummary = ev.event_type === "agent.summary"
-          const isAnswer = ev.event_type === "executor.response"
-          const text = String(ev.payload?.preview ?? ev.payload?.summary ?? "")
+          // Use full text when available; preview is truncated to 200 chars
+          const text = String(ev.payload?.text ?? ev.payload?.preview ?? ev.payload?.summary ?? "")
 
           return (
             <motion.div
@@ -667,11 +670,6 @@ function ConversationTab({
                 <div className="max-w-[75%] rounded-2xl rounded-tr-md bg-gradient-to-br from-[#5B6CFF] to-[#C45BFF] px-4 py-3">
                   <p className="text-sm text-white">{text}</p>
                 </div>
-              ) : isAnswer ? (
-                <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-[#00DCC8]/15 border border-[#00DCC8]/25 px-4 py-3 space-y-2">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#00DCC8]">Answer</p>
-                  <MarkdownText text={text} />
-                </div>
               ) : (
                 <div className="flex gap-3 max-w-[85%]">
                   <div className="shrink-0 h-7 w-7 rounded-lg bg-gradient-to-br from-[#5B6CFF] to-[#C45BFF] flex items-center justify-center mt-0.5">
@@ -685,6 +683,37 @@ function ConversationTab({
             </motion.div>
           )
         })}
+
+        {/* Ask Q&A pairs rendered as conversation bubbles */}
+        {askMessages.map((pair, i) => (
+          <div key={`ask-${i}`} className="space-y-3">
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+              className="flex justify-end"
+            >
+              <div className="max-w-[75%] rounded-2xl rounded-tr-md bg-gradient-to-br from-[#5B6CFF] to-[#C45BFF] px-4 py-3">
+                <p className="text-sm text-white">{pair.q}</p>
+              </div>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2, delay: 0.1 }}
+              className="flex justify-start"
+            >
+              <div className="flex gap-3 max-w-[85%]">
+                <div className="shrink-0 h-7 w-7 rounded-lg bg-gradient-to-br from-[#5B6CFF] to-[#C45BFF] flex items-center justify-center mt-0.5">
+                  <span className="text-white text-[10px] font-bold">AI</span>
+                </div>
+                <div className="rounded-2xl rounded-tl-md bg-white/8 border border-white/10 px-4 py-3">
+                  <MarkdownText text={pair.a} />
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        ))}
 
         {/* Checkpoint nudge */}
         {cp && (
@@ -752,12 +781,6 @@ function ConversationTab({
           </div>
           {error && <p className="text-xs text-[#EF4444]">{error}</p>}
           {sent && <p className="text-xs text-[#22C55E]">Guidance sent ✓</p>}
-          {askResponse && (
-            <div className="rounded-xl bg-[#00DCC8]/10 border border-[#00DCC8]/20 px-4 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#00DCC8] mb-1">Answer</p>
-              <p className="text-sm text-white/85 whitespace-pre-wrap">{askResponse}</p>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -885,6 +908,7 @@ function CheckpointsTab({
   executionId,
   policy,
   onResponse,
+  onRequestChanges,
   userDirectory,
 }: {
   cp: CheckpointBrief | null
@@ -893,6 +917,7 @@ function CheckpointsTab({
   executionId: string
   policy: PolicyOut | null
   onResponse: (nextAction: string, newStatus: string) => void
+  onRequestChanges?: () => void
   userDirectory: Map<string, { name: string; role: string }>
 }) {
   return (
@@ -949,6 +974,7 @@ function CheckpointsTab({
                   executionId={executionId}
                   checkpoint={cp}
                   onResponse={onResponse}
+                  onRequestChanges={onRequestChanges}
                 />
               ) : (
                 <p className="text-xs text-white/40 bg-white/5 px-3 py-2 rounded-lg">
@@ -1024,6 +1050,7 @@ export default function ExecutionWorkspacePage({
   const [summary, setSummary]             = useState<ExecutionSummaryOut | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [userDirectory, setUserDirectory] = useState<Map<string, { name: string; role: string }>>(new Map())
+  const [cancelling, setCancelling]       = useState(false)
 
   const lastEventIdRef  = useRef<string | null>(null)
   const timelineRef     = useRef<HTMLDivElement>(null)
@@ -1144,6 +1171,17 @@ export default function ExecutionWorkspacePage({
     setExecution((prev) => prev ? { ...prev, status: newStatus, blocking_checkpoint: null } : prev)
   }
 
+  async function handleCancel() {
+    if (!window.confirm("Cancel this execution? This cannot be undone.")) return
+    setCancelling(true)
+    try {
+      await apiFetch(`/executions/${executionId}/cancel`, { method: "POST" })
+      setExecution((prev) => prev ? { ...prev, status: "failed" } : prev)
+    } catch { /* already terminal or error — ignore */ } finally {
+      setCancelling(false)
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -1217,15 +1255,28 @@ export default function ExecutionWorkspacePage({
           )}
         </div>
 
-        {/* Tab bar */}
-        <TabBar
-          tabs={tabs}
-          activeTab={activeTab}
-          onTabChange={(id) => {
-            setActiveTab(id as typeof activeTab)
-            if (id === "summary") loadSummary()
-          }}
-        />
+        {/* Tab bar + Cancel */}
+        <div className="flex items-center justify-between">
+          <TabBar
+            tabs={tabs}
+            activeTab={activeTab}
+            onTabChange={(id) => {
+              setActiveTab(id as typeof activeTab)
+              if (id === "summary") loadSummary()
+            }}
+          />
+          {!isTerminal && (
+            <BigButton
+              variant="danger"
+              size="sm"
+              loading={cancelling}
+              onClick={handleCancel}
+              className="shrink-0 ml-3"
+            >
+              Cancel
+            </BigButton>
+          )}
+        </div>
       </div>
 
       {/* Left + right 2-col for timeline/conversation; full-width for others */}
@@ -1337,6 +1388,7 @@ export default function ExecutionWorkspacePage({
           executionId={executionId}
           policy={policy}
           onResponse={handleCheckpointResponse}
+          onRequestChanges={() => setActiveTab("conversation")}
           userDirectory={userDirectory}
         />
       ) : activeTab === "summary" && isTerminal ? (
