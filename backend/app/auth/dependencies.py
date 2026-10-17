@@ -40,9 +40,12 @@ async def get_current_user(
     return user
 
 
-def require_role(role: str):
+def require_any(*roles: str):
     async def _check(user: User = Depends(get_current_user)) -> User:
-        if user.role != role:
-            raise _FORBIDDEN
+        if user.role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"requires one of: {', '.join(roles)}",
+            )
         return user
     return _check

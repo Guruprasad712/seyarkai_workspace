@@ -19,7 +19,7 @@ from app.agents.schemas import (
     PatchAgentRequest,
     PatchVersionRequest,
 )
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_any
 from app.auth.models import User
 from app.core.db import get_db
 
@@ -98,7 +98,7 @@ async def list_mcp_tools(
 @router.post("/agents", response_model=AgentOut, status_code=status.HTTP_201_CREATED)
 async def create_agent(
     body: CreateAgentRequest,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     tools = await _load_tools(db, body.tool_ids)
@@ -175,7 +175,7 @@ async def get_agent(
 async def patch_agent(
     agent_id: str,
     body: PatchAgentRequest,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Agent).where(Agent.id == agent_id))
@@ -211,7 +211,7 @@ async def patch_agent(
 async def add_version(
     agent_id: str,
     body: CreateVersionRequest,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Agent).where(Agent.id == agent_id))
@@ -256,7 +256,7 @@ async def patch_version(
     agent_id: str,
     version_id: str,
     body: PatchVersionRequest,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
@@ -300,7 +300,7 @@ async def patch_version(
 async def publish_version(
     agent_id: str,
     version_id: str,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     # Load agent and version (no lock yet — just read)

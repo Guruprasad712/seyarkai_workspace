@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.models import Agent, AgentVersion
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_any
 from app.auth.models import User
 from app.core.config import settings
 from app.core.db import get_db
@@ -48,7 +48,7 @@ _TERMINAL_STATUSES = ("completed", "failed")
 async def create_execution(
     work_item_id: str,
     background_tasks: BackgroundTasks,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder", "reviewer")),
     db: AsyncSession = Depends(get_db),
 ):
     # 1. Load work item
@@ -380,9 +380,9 @@ async def respond_to_checkpoint(
     if checkpoint is None:
         raise HTTPException(status_code=404, detail="checkpoint not found")
 
-    # 5. Permission: assignee or super_admin
-    if str(checkpoint.assigned_user_id) != str(current_user.id) and current_user.role != "super_admin":
-        raise HTTPException(status_code=403, detail="only the assigned reviewer or a super_admin may respond")
+    # 5. Permission: assignee or admin
+    if str(checkpoint.assigned_user_id) != str(current_user.id) and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="only the assigned reviewer or an admin may respond")
 
     # 6. Validate decision vs checkpoint type (all-failures)
     failures = []
@@ -542,7 +542,7 @@ async def respond_to_checkpoint(
 async def send_guidance_message(
     execution_id: str,
     body: GuidanceMessageIn,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any("admin", "builder", "reviewer")),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Execution).where(Execution.id == execution_id))

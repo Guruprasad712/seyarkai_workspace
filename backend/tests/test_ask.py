@@ -1,4 +1,4 @@
-"""Tests for POST /executions/{id}/ask — offline (LLM call is mocked)."""
+﻿"""Tests for POST /executions/{id}/ask â€” offline (LLM call is mocked)."""
 from __future__ import annotations
 
 import contextlib
@@ -50,7 +50,7 @@ async def auth_headers_ask(test_db_url: str):
         await db.execute(
             text(
                 "INSERT INTO users (id, email, name, hashed_password, role, status, created_at, updated_at) "
-                "VALUES (:id, :email, :name, :hp, 'member', 'active', now(), now())"
+                "VALUES (:id, :email, :name, :hp, 'admin', 'active', now(), now())"
             ),
             {
                 "id": user_id,
@@ -61,7 +61,7 @@ async def auth_headers_ask(test_db_url: str):
         )
         await db.commit()
 
-    token = create_access_token(user_id, "member")
+    token = create_access_token(user_id, "admin")
     yield {"Authorization": f"Bearer {token}", "_user_id": user_id}
 
     async with _test_db(test_db_url) as db:

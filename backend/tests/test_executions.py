@@ -1,4 +1,4 @@
-"""Execution create/read/list endpoint tests — all offline (no engine runs)."""
+﻿"""Execution create/read/list endpoint tests â€” all offline (no engine runs)."""
 from __future__ import annotations
 
 import contextlib
@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.core.security import create_access_token, hash_password
 
 
-# Suppress the background engine task for all tests in this file — these tests
+# Suppress the background engine task for all tests in this file â€” these tests
 # cover the HTTP layer only (create/read/list). The engine itself is tested in
 # test_engine.py. Without this, the engine fires in a background task and races
 # with fixture teardown (deleting rows the engine is still using).
@@ -53,7 +53,7 @@ async def auth_headers(test_db_url: str):
         await db.execute(
             text(
                 "INSERT INTO users (id, email, name, hashed_password, role, status, created_at, updated_at) "
-                "VALUES (:id, :email, :name, :hp, 'member', 'active', now(), now())"
+                "VALUES (:id, :email, :name, :hp, 'admin', 'active', now(), now())"
             ),
             {
                 "id": user_id,
@@ -64,7 +64,7 @@ async def auth_headers(test_db_url: str):
         )
         await db.commit()
 
-    token = create_access_token(user_id, "member")
+    token = create_access_token(user_id, "admin")
     yield {"Authorization": f"Bearer {token}", "_user_id": user_id}
 
     async with _test_db(test_db_url) as db:
@@ -533,7 +533,7 @@ async def test_get_execution_includes_artifacts(
                 "id": artifact_id,
                 "eid": exec_id,
                 "sid": stage_id,
-                "name": "Stage 1 — google-doc-abc",
+                "name": "Stage 1 â€” google-doc-abc",
                 "type": "google_doc",
                 "url": "https://docs.google.com/document/d/abc/edit",
             },
@@ -548,7 +548,7 @@ async def test_get_execution_includes_artifacts(
     assert len(body["artifacts"]) == 1
     a = body["artifacts"][0]
     assert a["id"] == artifact_id
-    assert a["name"] == "Stage 1 — google-doc-abc"
+    assert a["name"] == "Stage 1 â€” google-doc-abc"
     assert a["type"] == "google_doc"
     assert a["url"] == "https://docs.google.com/document/d/abc/edit"
     assert a["stage_id"] == stage_id

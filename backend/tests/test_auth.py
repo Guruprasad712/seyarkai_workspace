@@ -1,4 +1,4 @@
-"""Auth tests — all offline (no Vertex AI calls).
+﻿"""Auth tests â€” all offline (no Vertex AI calls).
 
 Fixtures seed_user and auth_headers are local to this module.
 The session-scoped apply_migrations and async_client come from conftest.py.
@@ -49,13 +49,13 @@ async def seed_user(test_db_url: str, async_client: AsyncClient):
         await db.execute(
             text(
                 "INSERT INTO users (id, email, name, hashed_password, role, status, created_at, updated_at) "
-                "VALUES (:id, :email, :name, :hp, 'member', 'active', now(), now())"
+                "VALUES (:id, :email, :name, :hp, 'admin', 'active', now(), now())"
             ),
             {"id": user_id, "email": "test@example.com", "name": "Test User", "hp": hash_password(_PASSWORD)},
         )
         await db.commit()
 
-    yield {"id": user_id, "email": "test@example.com", "role": "member"}
+    yield {"id": user_id, "email": "test@example.com", "role": "admin"}
 
     async with _test_db(test_db_url) as db:
         await db.execute(text("DELETE FROM users WHERE id = :id"), {"id": user_id})
@@ -70,7 +70,7 @@ async def inactive_user(test_db_url: str, async_client: AsyncClient):
         await db.execute(
             text(
                 "INSERT INTO users (id, email, name, hashed_password, role, status, created_at, updated_at) "
-                "VALUES (:id, :email, :name, :hp, 'member', 'inactive', now(), now())"
+                "VALUES (:id, :email, :name, :hp, 'admin', 'inactive', now(), now())"
             ),
             {
                 "id": user_id,
@@ -171,7 +171,7 @@ async def test_password_over_72_bytes(async_client: AsyncClient, seed_user):
 @pytest.mark.anyio
 async def test_expired_token(async_client: AsyncClient, seed_user):
     expired = jwt.encode(
-        {"sub": seed_user["id"], "role": "member", "exp": datetime.now(timezone.utc) - timedelta(hours=1)},
+        {"sub": seed_user["id"], "role": "admin", "exp": datetime.now(timezone.utc) - timedelta(hours=1)},
         settings.JWT_SECRET,
         algorithm="HS256",
     )
@@ -255,6 +255,6 @@ async def test_every_registered_route_requires_auth(async_client: AsyncClient):
                 continue
             r = await async_client.request(method, path)
             if r.status_code != 401:
-                missing_auth.append(f"{method} {path} → {r.status_code}")
+                missing_auth.append(f"{method} {path} â†’ {r.status_code}")
 
     assert not missing_auth, f"Routes missing auth: {missing_auth}"

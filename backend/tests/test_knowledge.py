@@ -1,4 +1,4 @@
-"""Knowledge module tests — all offline (no Vertex AI calls)."""
+﻿"""Knowledge module tests â€” all offline (no Vertex AI calls)."""
 from __future__ import annotations
 
 import uuid
@@ -20,14 +20,14 @@ from app.knowledge.retrievers import (
 )
 
 
-# ─── Pure-function tests ──────────────────────────────────────────────────────
+# â”€â”€â”€ Pure-function tests â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_freshness_fresh_below_boundary():
     assert compute_freshness(89) == "fresh"
 
 
 def test_freshness_fresh_at_boundary():
-    assert compute_freshness(90) == "fresh"  # ≤ ageing_days
+    assert compute_freshness(90) == "fresh"  # â‰¤ ageing_days
 
 
 def test_freshness_ageing_just_above():
@@ -39,7 +39,7 @@ def test_freshness_ageing_below_stale():
 
 
 def test_freshness_ageing_at_stale_boundary():
-    assert compute_freshness(180) == "ageing"  # ≤ stale_days
+    assert compute_freshness(180) == "ageing"  # â‰¤ stale_days
 
 
 def test_freshness_stale():
@@ -51,7 +51,7 @@ def test_freshness_custom_thresholds():
     assert compute_freshness(15, ageing_days=7, stale_days=14) == "stale"
 
 
-# ─── build_injection_block ────────────────────────────────────────────────────
+# â”€â”€â”€ build_injection_block â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _hit(title: str, freshness: str, age_days: int, snippet: str = "snippet text") -> KnowledgeHit:
     return KnowledgeHit(
@@ -99,7 +99,7 @@ def test_build_injection_block_multiple():
     assert block.index("[1]") < block.index("[2]")
 
 
-# ─── FakeRetriever ────────────────────────────────────────────────────────────
+# â”€â”€â”€ FakeRetriever â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_fake_retriever_returns_scripted_hits():
@@ -116,7 +116,7 @@ async def test_fake_retriever_empty():
     assert result == []
 
 
-# ─── HTTP CRUD (async_client fixture from conftest) ───────────────────────────
+# â”€â”€â”€ HTTP CRUD (async_client fixture from conftest) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest_asyncio.fixture()
 async def auth_headers(test_db_url: str) -> dict:
@@ -126,13 +126,13 @@ async def auth_headers(test_db_url: str) -> dict:
         await db.execute(
             text(
                 "INSERT INTO users(id,email,name,hashed_password,role,status,created_at,updated_at)"
-                " VALUES(:id,:email,'KTest',:pw,'super_admin','active',now(),now())"
+                " VALUES(:id,:email,'KTest',:pw,'admin','active',now(),now())"
             ),
             {"id": user_id, "email": f"ktest_{user_id[:8]}@test.com", "pw": hash_password("pw")},
         )
         await db.commit()
 
-    token = create_access_token(user_id, "super_admin")
+    token = create_access_token(user_id, "admin")
     yield {"Authorization": f"Bearer {token}", "_user_id": user_id}
 
     async with factory() as db:
@@ -255,7 +255,7 @@ async def test_verify_not_found(async_client: AsyncClient, auth_headers: dict):
     assert resp.status_code == 404
 
 
-# ─── Engine knowledge injection ───────────────────────────────────────────────
+# â”€â”€â”€ Engine knowledge injection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # These tests reuse the engine_setup fixture from test_engine.py context.
 # They live here to keep knowledge tests co-located.
 
@@ -299,7 +299,7 @@ async def ki_setup(test_db_url: str):
     async with factory() as db:
         await db.execute(text(
             "INSERT INTO users(id,email,name,hashed_password,role,status,created_at,updated_at) "
-            "VALUES(:id,:email,'U',:pw,'super_admin','active',now(),now())"
+            "VALUES(:id,:email,'U',:pw,'admin','active',now(),now())"
         ), {"id": user_id, "email": f"ki_{user_id}@test.com", "pw": hash_password("x")})
         await db.execute(text(
             "INSERT INTO projects(id,name,description,status,created_by,created_at,updated_at) "
@@ -472,7 +472,7 @@ async def test_engine_empty_hits_skips_event(ki_setup, test_db_url: str):
     assert "knowledge.retrieved" not in event_types
 
 
-# ─── Search endpoint ──────────────────────────────────────────────────────────
+# â”€â”€â”€ Search endpoint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @pytest.mark.asyncio
 async def test_search_knowledge_offline_returns_empty(

@@ -1,4 +1,4 @@
-"""ExecutionEngine tests — all offline (no Vertex AI calls).
+﻿"""ExecutionEngine tests â€” all offline (no Vertex AI calls).
 
 run_stage is patched so no ADK / Gemini involvement.
 """
@@ -74,7 +74,7 @@ async def engine_setup(test_db_url: str):
         await db.execute(
             text(
                 "INSERT INTO users (id, email, name, hashed_password, role, status, created_at, updated_at) "
-                "VALUES (:id, :email, 'Engine Test', :hp, 'member', 'active', now(), now())"
+                "VALUES (:id, :email, 'Engine Test', :hp, 'admin', 'active', now(), now())"
             ),
             {"id": user_id, "email": f"eng_{user_id[:8]}@example.com", "hp": hash_password("pw")},
         )
@@ -351,7 +351,7 @@ async def test_engine_stage_error_sets_failed(engine_setup, test_db_url: str):
 
 @pytest.mark.asyncio
 async def test_engine_no_final_review_completes(engine_setup, test_db_url: str):
-    """Policy with no checkpoints at all → execution + work_item both completed."""
+    """Policy with no checkpoints at all â†’ execution + work_item both completed."""
     policy_id = engine_setup["policy_id"]
     checkpoint_id = engine_setup["checkpoint_id"]
     wi_id = engine_setup["work_item_id"]
@@ -410,7 +410,7 @@ async def test_engine_no_final_review_completes(engine_setup, test_db_url: str):
                 text("UPDATE work_items SET status = 'in_progress', updated_at = now() WHERE id = :wid"),
                 {"wid": wi_id},
             )
-            # Restore checkpoint (fixture teardown will try to delete it but it's already gone — OK)
+            # Restore checkpoint (fixture teardown will try to delete it but it's already gone â€” OK)
             await db.commit()
 
 
@@ -519,7 +519,7 @@ async def test_engine_summary_error_does_not_block_checkpoint(engine_setup, test
 
 @pytest.mark.asyncio
 async def test_engine_artifact_created_on_generate_document(engine_setup, test_db_url: str):
-    """generate_document tool.result with structured_result → artifacts row + artifact.created event."""
+    """generate_document tool.result with structured_result â†’ artifacts row + artifact.created event."""
     exc_id = engine_setup["execution_id"]
     stage_id = engine_setup["stage_id"]
     doc_url = "https://docs.google.com/document/d/google-doc-123/edit"
@@ -563,7 +563,7 @@ async def test_engine_artifact_created_on_generate_document(engine_setup, test_d
 
 @pytest.mark.asyncio
 async def test_engine_artifact_html_fallback_type(engine_setup, test_db_url: str):
-    """generate_document with html- document_id → artifact.type = 'html'."""
+    """generate_document with html- document_id â†’ artifact.type = 'html'."""
     exc_id = engine_setup["execution_id"]
     html_id = f"html-{uuid.uuid4()}"
     html_url = f"http://localhost:8000/artifacts/{html_id.removeprefix('html-')}.html"

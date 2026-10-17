@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.models import AgentVersion
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_any
 from app.auth.models import User
 from app.core.db import get_db
 from app.projects.models import Project
@@ -124,7 +124,7 @@ async def _validate_and_build_workers(
 @router.post("/projects", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
 async def create_project(
     body: CreateProjectRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     now = datetime.now(timezone.utc)
@@ -179,7 +179,7 @@ async def get_project(
 async def patch_project(
     project_id: str,
     body: PatchProjectRequest,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Project).where(Project.id == project_id))
@@ -218,7 +218,7 @@ async def patch_project(
 async def create_work_item(
     project_id: str,
     body: CreateWorkItemRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Project).where(Project.id == project_id))

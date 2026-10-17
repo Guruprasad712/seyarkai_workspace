@@ -1,9 +1,10 @@
-"""Idempotent seed: 1 super_admin + 2 members.
+"""Idempotent seed: four role-based demo users.
 
 Passwords come from env vars — never hard-coded (repo is public):
   SEED_ADMIN_PASSWORD
-  SEED_MEMBER1_PASSWORD
-  SEED_MEMBER2_PASSWORD
+  SEED_BUILDER_PASSWORD
+  SEED_REVIEWER_PASSWORD
+  SEED_OBSERVER_PASSWORD
 
 A missing env var skips that user. Run twice: row counts stay the same.
 
@@ -25,21 +26,27 @@ from app.core.security import hash_password
 _USERS = [
     {
         "email": "admin@seyarkai.example",
-        "name": "Admin",
-        "role": "super_admin",
+        "name": "Admin User",
+        "role": "admin",
         "env_var": "SEED_ADMIN_PASSWORD",
     },
     {
-        "email": "member1@seyarkai.example",
-        "name": "Member One",
-        "role": "member",
-        "env_var": "SEED_MEMBER1_PASSWORD",
+        "email": "builder@seyarkai.example",
+        "name": "Builder User",
+        "role": "builder",
+        "env_var": "SEED_BUILDER_PASSWORD",
     },
     {
-        "email": "member2@seyarkai.example",
-        "name": "Member Two",
-        "role": "member",
-        "env_var": "SEED_MEMBER2_PASSWORD",
+        "email": "reviewer@seyarkai.example",
+        "name": "Reviewer User",
+        "role": "reviewer",
+        "env_var": "SEED_REVIEWER_PASSWORD",
+    },
+    {
+        "email": "observer@seyarkai.example",
+        "name": "Observer User",
+        "role": "observer",
+        "env_var": "SEED_OBSERVER_PASSWORD",
     },
 ]
 

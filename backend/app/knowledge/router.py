@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_any
 from app.auth.models import User
 from app.core.config import settings
 from app.core.db import AsyncSessionLocal, get_db
@@ -40,7 +40,7 @@ async def list_knowledge(
 @router.post("/knowledge", response_model=KnowledgeDocumentOut, status_code=status.HTTP_201_CREATED)
 async def create_knowledge(
     body: KnowledgeDocumentIn,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder", "reviewer")),
     db: AsyncSession = Depends(get_db),
 ):
     now = datetime.now(timezone.utc)
@@ -69,7 +69,7 @@ async def create_knowledge(
 @router.post("/knowledge/{doc_id}/verify", response_model=KnowledgeDocumentOut)
 async def verify_knowledge(
     doc_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any("admin", "builder", "reviewer")),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(

@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_any
 from app.auth.models import User
 from app.core.db import get_db
 from app.work_items.models import WorkItem
@@ -39,7 +39,7 @@ async def get_work_item(
 async def patch_work_item(
     work_item_id: str,
     body: PatchWorkItemRequest,
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_any("admin", "builder")),
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(WorkItem).where(WorkItem.id == work_item_id))
