@@ -26,6 +26,7 @@ export function AppShell() {
   const { user, logout } = useAuth()
   const pathname = usePathname()
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null)
+  const [confirmLogout, setConfirmLogout] = useState(false)
 
   useEffect(() => {
     apiFetch<{ status: string }>("/health")
@@ -104,7 +105,7 @@ export function AppShell() {
               </span>
             )}
             <button
-              onClick={logout}
+              onClick={() => setConfirmLogout(true)}
               className="flex items-center gap-2 px-3 py-1.5 rounded-xl glass text-sm text-white/70 hover:text-white hover:bg-white/10 transition-all duration-200 cursor-pointer"
             >
               <span className="flex items-center justify-center h-6 w-6 rounded-lg bg-gradient-to-br from-[#5B6CFF] to-[#C45BFF] text-white text-xs font-bold shrink-0">
@@ -112,6 +113,40 @@ export function AppShell() {
               </span>
               <span className="hidden sm:inline">{user.name}</span>
             </button>
+
+            {/* Logout confirmation dialog */}
+            {confirmLogout && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                style={{ background: "rgba(7,10,20,0.75)", backdropFilter: "blur(8px)" }}
+                onClick={() => setConfirmLogout(false)}
+              >
+                <div
+                  className="glass-strong rounded-2xl px-6 py-5 w-full max-w-xs space-y-4"
+                  style={{ border: "1px solid rgba(255,255,255,0.12)" }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div>
+                    <p className="font-heading font-semibold text-white text-base">Sign out?</p>
+                    <p className="text-sm text-white/50 mt-1">You&apos;ll need to sign in again to continue.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={logout}
+                      className="flex-1 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-[#5B6CFF] to-[#C45BFF] hover:opacity-90 transition-opacity"
+                    >
+                      Sign out
+                    </button>
+                    <button
+                      onClick={() => setConfirmLogout(false)}
+                      className="flex-1 py-2 rounded-xl text-sm font-semibold text-white/70 glass hover:text-white hover:bg-white/10 transition-all border border-white/15"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </nav>
