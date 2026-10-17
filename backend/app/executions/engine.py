@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.models import Agent, AgentVersion, AgentVersionTool, McpTool
 from app.core.config import settings
-from app.executions.models import Artifact, Execution, ExecutionEvent, Message
+from app.executions.models import Artifact, CheckpointResponse, Execution, ExecutionEvent, Message
 from app.knowledge.retrievers import KnowledgeRetriever, build_injection_block
 from app.policies.models import Checkpoint, Policy, PolicyStage
 from app.projects.models import Project  # noqa: F401 — ensures projects table is in mapper metadata
@@ -403,6 +403,22 @@ class ExecutionEngine:
                 # Check for a checkpoint on this stage
                 cp = checkpoint_by_stage.get(sid)
                 if cp is not None:
+                    # Defense-in-depth: skip if this checkpoint already has an approved response.
+                    # Normally the router prevents re-entry, but this guard handles unexpected
+                    # restarts (e.g. process crash mid-stage) without looping.
+                    resp_result = await db.execute(
+                        select(CheckpointResponse)
+                        .where(
+                            CheckpointResponse.checkpoint_id == cp.id,
+                            CheckpointResponse.execution_id == execution_id,
+                        )
+                        .order_by(CheckpointResponse.created_at.desc())
+                        .limit(1)
+                    )
+                    prior_response = resp_result.scalar_one_or_none()
+                    if prior_response is not None and prior_response.decision in {"approve", "input_provided"}:
+                        continue  # checkpoint already cleared — advance to next stage
+
                     # Collect agent summary from already-persisted messages (no new subprocess)
                     summary_text = await _collect_stage_summary(db, execution_id, sid)
                     execution.pending_summary = summary_text

@@ -457,8 +457,10 @@ async def respond_to_checkpoint(
         ))
         next_action = "failed"
 
-    elif body.decision == "approve" and checkpoint.stage_id is None:
-        # Final review approval — complete everything
+    elif checkpoint.stage_id is None:
+        # Final review checkpoint (approve or input_provided) — complete the execution.
+        # input_provided here means the reviewer approved with notes; the notes are stored
+        # as a guidance message but the work is done.
         result = await db.execute(select(WorkItem).where(WorkItem.id == execution.work_item_id))
         work_item = result.scalar_one()
         execution.status = "completed"
@@ -477,22 +479,30 @@ async def respond_to_checkpoint(
             payload={},
             created_at=now,
         ))
+        if body.input_text:
+            db.add(Message(
+                id=uuid.uuid4(),
+                execution_id=execution_id,
+                stage_id=None,
+                sender_type="human",
+                sender_id=current_user.id,
+                message_type="guidance",
+                content=body.input_text,
+                consumed_at=now,
+                created_at=now,
+                updated_at=now,
+            ))
         next_action = "completed"
 
     else:
-        # approve (stage checkpoint) or input_provided — resume engine
-        if checkpoint.stage_id is not None:
-            result = await db.execute(
-                select(PolicyStage).where(PolicyStage.id == checkpoint.stage_id)
-            )
-            owning_stage = result.scalar_one()
-            if body.decision == "input_provided":
-                # Re-run the same stage so the agent can rework based on guidance
-                next_stage_sequence = owning_stage.sequence
-            else:
-                next_stage_sequence = owning_stage.sequence + 1
-        else:
-            next_stage_sequence = 1
+        # approve or input_provided on a stage checkpoint — always advance to next stage.
+        # The reviewer's input_text is stored as unconsumed guidance so the next stage
+        # receives it as binding context; the current stage is never re-run.
+        result = await db.execute(
+            select(PolicyStage).where(PolicyStage.id == checkpoint.stage_id)
+        )
+        owning_stage = result.scalar_one()
+        next_stage_sequence = owning_stage.sequence + 1
 
         if body.decision == "input_provided" and body.input_text:
             # Store input as unconsumed guidance for the next stage
