@@ -33,7 +33,7 @@ export default function AgentsPage() {
         <div className="mb-8 flex items-start justify-between gap-4">
           <div>
             <h1 className="font-heading text-4xl font-black text-white">Agent Library</h1>
-            <p className="mt-1.5 text-white/50">Manage AI agents and their published versions.</p>
+            <p className="mt-1.5 text-white/50">AI teammates you build once and reuse anywhere.</p>
           </div>
           {canEdit && (
             <Link href="/agents/new">

@@ -151,7 +151,7 @@ export default function KnowledgePage() {
         <div className="mb-8 flex items-start justify-between gap-4">
           <div>
             <h1 className="font-heading text-4xl font-black text-white">Company Brain</h1>
-            <p className="mt-1.5 text-white/50">Knowledge documents injected into agent stage tasks.</p>
+            <p className="mt-1.5 text-white/50">Your agents are only as good as what they read. Is it still true?</p>
           </div>
           <AddDocForm onAdded={(doc) => setDocs(prev => [doc, ...prev])} canWrite={canWrite} />
         </div>

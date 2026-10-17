@@ -530,18 +530,21 @@ export default function PolicyEditorPage({
         <Link href={backHref} className="text-sm text-white/45 hover:text-white transition-colors">
           ← Work item
         </Link>
-        <div className="flex flex-1 items-center gap-3">
-          <span className="font-heading font-semibold text-white">Policy v{policy.version}</span>
-          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
-            policy.status === "published" ? "bg-[#22C55E]/15 text-[#22C55E]" : "bg-white/10 text-white/55"
-          }`}>
-            {policy.status}
-          </span>
-          {policy.published_at && (
-            <span className="font-mono text-xs text-white/30">
-              Published {new Date(policy.published_at).toLocaleDateString()}
+        <div className="flex flex-1 flex-col gap-0.5">
+          <div className="flex items-center gap-3">
+            <span className="font-heading font-semibold text-white">Policy v{policy.version}</span>
+            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
+              policy.status === "published" ? "bg-[#22C55E]/15 text-[#22C55E]" : "bg-white/10 text-white/55"
+            }`}>
+              {policy.status}
             </span>
-          )}
+            {policy.published_at && (
+              <span className="font-mono text-xs text-white/30">
+                Published {new Date(policy.published_at).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-white/40">You draw the line: where AI runs, where a human must say yes.</p>
         </div>
         {policy.status !== "published" && can.publishPolicy(user?.role ?? "") && (
           <BigButton variant="gradient" size="md" loading={publishing} onClick={handlePublish}>

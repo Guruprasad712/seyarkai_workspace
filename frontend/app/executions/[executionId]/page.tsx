@@ -293,7 +293,9 @@ function ArtifactsTab({ artifacts }: { artifacts: ArtifactOut[] }) {
     )
   }
   return (
-    <div className="flex-1 overflow-y-auto p-5">
+    <div className="flex flex-col h-full">
+      <p className="shrink-0 px-5 pt-3 pb-1 text-xs text-white/35">What the team made. Summary first.</p>
+      <div className="flex-1 overflow-y-auto p-5">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl mx-auto">
         {artifacts.map((a) => (
           <GlassCard key={a.id} className="flex flex-col gap-3">
@@ -322,6 +324,7 @@ function ArtifactsTab({ artifacts }: { artifacts: ArtifactOut[] }) {
             </a>
           </GlassCard>
         ))}
+      </div>
       </div>
     </div>
   )
@@ -560,6 +563,7 @@ function ConversationTab({
 
   return (
     <div className="flex flex-col h-full">
+      <p className="shrink-0 px-5 pt-3 pb-1 text-xs text-white/35">Talk to the agent like a teammate. It pings you when it&apos;s stuck.</p>
       {/* Messages */}
       <div
         ref={listRef}
@@ -618,7 +622,7 @@ function ConversationTab({
             <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-[#FF7AC8]/12 border border-[#FF7AC8]/25 px-4 py-4 space-y-3">
               <div className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-[#FF7AC8] animate-pulse" />
-                <p className="text-sm font-semibold text-[#FF7AC8]">Your review is needed</p>
+                <p className="text-sm font-semibold text-[#FF7AC8]">I&apos;ve stopped. I need a human.</p>
               </div>
               <p className="text-xs text-white/60">{cp.instruction}</p>
               <BigButton variant="ghost" size="sm" onClick={onGoToCheckpoints}>
@@ -718,6 +722,7 @@ function TimelineTab({
 
   return (
     <div className="flex flex-col h-full">
+      <p className="shrink-0 px-5 pt-3 pb-1 text-xs text-white/35">Every move, in order. Reasoning summarised, never raw.</p>
       {/* Filter bar */}
       <div className="shrink-0 px-4 py-3 border-b border-white/8 flex items-center gap-2 flex-wrap">
         <span className="text-xs text-white/40 mr-1">Filter:</span>
@@ -819,7 +824,9 @@ function CheckpointsTab({
   onResponse: (nextAction: string, newStatus: string) => void
 }) {
   return (
-    <div className="flex-1 overflow-y-auto p-5">
+    <div className="flex flex-col h-full">
+      <p className="shrink-0 px-5 pt-3 pb-1 text-xs text-white/35">The agent stops here. Nothing moves until a human says yes.</p>
+      <div className="flex-1 overflow-y-auto p-5">
       <div className="max-w-2xl mx-auto space-y-5">
         {cp ? (
           <GlassCard glow="pink" padding={false} className="overflow-hidden">
@@ -905,6 +912,7 @@ function CheckpointsTab({
             </div>
           </GlassCard>
         )}
+      </div>
       </div>
     </div>
   )
@@ -1105,6 +1113,8 @@ export default function ExecutionWorkspacePage({
               </div>
             )}
           </div>
+
+          <p className="text-xs text-white/35 mt-0.5">Live. Shared. Governed.</p>
 
           {/* Stage progress */}
           {currentStage && (

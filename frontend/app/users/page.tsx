@@ -231,7 +231,7 @@ export default function UsersPage() {
         <div className="mb-8 flex items-start justify-between gap-4">
           <div>
             <h1 className="font-heading text-4xl font-black text-white">User Management</h1>
-            <p className="mt-1.5 text-white/50">Manage roles and access for workspace members.</p>
+            <p className="mt-1.5 text-white/50">Four roles. Everyone knows what they can do.</p>
           </div>
           <BigButton variant="gradient" size="md" onClick={() => setShowAdd(true)}>
             + Add User

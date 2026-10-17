@@ -123,7 +123,7 @@ export default function ProjectsPage() {
           <div>
             <h1 className="font-heading text-4xl font-black text-white">Projects</h1>
             <p className="mt-1.5 text-white/50">
-              Manage AI-assisted work items and policy execution.
+              A shared room for your team and its agents.
             </p>
           </div>
           {!showCreate && canEdit && (

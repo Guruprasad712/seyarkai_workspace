@@ -30,8 +30,8 @@ const notoSansTamil = Noto_Sans_Tamil({
 })
 
 export const metadata: Metadata = {
-  title: "Seyarkai",
-  description: "Governed AI Execution Workspace",
+  title: "Seyarkai: co-op mode for AI work. Your team and your agents on the same task, with humans approving every checkpoint.",
+  description: "Co-op mode for AI work. Your team and your agents on the same task, with humans approving every checkpoint.",
 }
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

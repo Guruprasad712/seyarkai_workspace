@@ -86,16 +86,15 @@ export default function LoginPage() {
         {/* Main pitch */}
         <div className="space-y-5">
           <h1 className="font-heading text-5xl font-extrabold text-white leading-tight">
-            AI does the work.<br />
-            You stay in control.
+            Co-op mode for AI work.
           </h1>
           <p className="text-white/60 text-base leading-relaxed max-w-xs">
-            A governed workspace where agents execute, and humans approve at every checkpoint.
+            Your team and your agents, on the same task, live. Humans approve every checkpoint.
           </p>
 
           {/* Feature chips */}
           <div className="flex flex-wrap gap-2 pt-2">
-            {["Checkpoints", "Fresh knowledge", "Full audit trail"].map((f) => (
+            {["Watch", "Steer", "Approve"].map((f) => (
               <span
                 key={f}
                 className="px-3 py-1.5 rounded-full text-sm text-white/70 glass"

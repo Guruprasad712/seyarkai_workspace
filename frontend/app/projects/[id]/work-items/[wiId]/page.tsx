@@ -186,6 +186,7 @@ export default function WorkItemDetailPage({
               <h1 className="font-heading text-3xl font-black text-white">{workItem.name}</h1>
               <StatusPill status={workItem.status} />
             </div>
+            <p className="mt-1 text-sm text-white/45">One objective. One agent. Your whole team.</p>
             <p className="mt-1 font-mono text-xs text-white/30">
               Created {new Date(workItem.created_at).toLocaleDateString()}
             </p>
