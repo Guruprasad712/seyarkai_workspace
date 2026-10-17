@@ -815,6 +815,7 @@ function CheckpointsTab({
   executionId,
   policy,
   onResponse,
+  userDirectory,
 }: {
   cp: CheckpointBrief | null
   execution: ExecutionOut
@@ -822,6 +823,7 @@ function CheckpointsTab({
   executionId: string
   policy: PolicyOut | null
   onResponse: (nextAction: string, newStatus: string) => void
+  userDirectory: Map<string, { name: string; role: string }>
 }) {
   return (
     <div className="flex flex-col h-full">
@@ -846,17 +848,31 @@ function CheckpointsTab({
               <div className="rounded-xl bg-white/5 border border-white/8 px-4 py-4 space-y-2">
                 <p className="text-xs font-bold uppercase tracking-widest text-white/35">Agent Summary</p>
                 {execution.pending_summary ? (
-                  <p className="text-sm whitespace-pre-wrap text-white/80">{execution.pending_summary}</p>
+                  <MarkdownText text={execution.pending_summary} className="text-sm text-white/80" />
                 ) : (
                   <p className="text-sm italic text-white/35">Summary pending…</p>
                 )}
               </div>
 
               {/* Assigned to */}
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-white/40">Assigned to:</p>
-                <p className="font-mono text-xs text-white/70">{cp.assigned_user_id}</p>
-              </div>
+              {(() => {
+                const assignee = userDirectory.get(cp.assigned_user_id)
+                return (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-xs text-white/40">Assigned to:</p>
+                    {assignee ? (
+                      <>
+                        <p className="text-xs text-white/80 font-medium">{assignee.name}</p>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-white/10 text-white/50 border border-white/15">
+                          {assignee.role}
+                        </span>
+                      </>
+                    ) : (
+                      <p className="font-mono text-xs text-white/70">{cp.assigned_user_id}</p>
+                    )}
+                  </div>
+                )
+              })()}
 
               {isAssignee ? (
                 <CheckpointActions
@@ -937,6 +953,7 @@ export default function ExecutionWorkspacePage({
   const [activeTab, setActiveTab]         = useState<"conversation" | "timeline" | "artifacts" | "checkpoints">("conversation")
   const [summary, setSummary]             = useState<ExecutionSummaryOut | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
+  const [userDirectory, setUserDirectory] = useState<Map<string, { name: string; role: string }>>(new Map())
 
   const lastEventIdRef  = useRef<string | null>(null)
   const timelineRef     = useRef<HTMLDivElement>(null)
@@ -962,6 +979,9 @@ export default function ExecutionWorkspacePage({
       }
       apiFetch<WorkItem>(`/work-items/${exec.work_item_id}`)
         .then(setWorkItem)
+        .catch(() => {})
+      apiFetch<{ id: string; name: string; role: string }[]>("/users/directory")
+        .then((list) => setUserDirectory(new Map(list.map((u) => [u.id, { name: u.name, role: u.role }]))))
         .catch(() => {})
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load execution")
@@ -1247,6 +1267,7 @@ export default function ExecutionWorkspacePage({
           executionId={executionId}
           policy={policy}
           onResponse={handleCheckpointResponse}
+          userDirectory={userDirectory}
         />
       ) : activeTab === "summary" && isTerminal ? (
         summaryLoading ? (
