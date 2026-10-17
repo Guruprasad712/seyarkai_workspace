@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { motion } from "motion/react"
 import { apiFetch, ApiError } from "@/lib/api"
+import { getToken } from "@/lib/auth"
 import { useAuth } from "@/components/auth-provider"
 import { can } from "@/lib/permissions"
 import { GlassCard } from "@/components/glass-card"
@@ -281,7 +282,33 @@ function KnowledgeEventRow({ ev, isNew }: { ev: EventOut; isNew: boolean }) {
 
 // ─── Artifacts Tab ────────────────────────────────────────────────────────────
 
+const _ARTIFACTS_API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+
 function ArtifactsTab({ artifacts }: { artifacts: ArtifactOut[] }) {
+  const [htmlModal, setHtmlModal] = useState<{ id: string; html: string } | null>(null)
+  const [htmlError, setHtmlError] = useState<{ id: string; msg: string } | null>(null)
+  const [htmlLoading, setHtmlLoading] = useState<string | null>(null)
+
+  async function openHtmlDoc(artifactId: string, artifactUrl: string) {
+    setHtmlLoading(artifactId)
+    setHtmlError(null)
+    try {
+      const token = getToken()
+      const r = await fetch(`${_ARTIFACTS_API_BASE}${artifactUrl}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!r.ok) {
+        throw new Error(r.status === 404 ? "Document not found" : `Failed to load (${r.status})`)
+      }
+      const html = await r.text()
+      setHtmlModal({ id: artifactId, html })
+    } catch (e) {
+      setHtmlError({ id: artifactId, msg: (e as Error).message })
+    } finally {
+      setHtmlLoading(null)
+    }
+  }
+
   if (artifacts.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-white/45">
@@ -293,40 +320,83 @@ function ArtifactsTab({ artifacts }: { artifacts: ArtifactOut[] }) {
     )
   }
   return (
-    <div className="flex flex-col h-full">
-      <p className="shrink-0 px-5 pt-3 pb-1 text-xs text-white/35">What the team made. Summary first.</p>
-      <div className="flex-1 overflow-y-auto p-5">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl mx-auto">
-        {artifacts.map((a) => (
-          <GlassCard key={a.id} className="flex flex-col gap-3">
-            <div className="flex items-start justify-between gap-3">
-              <span className="text-sm font-semibold text-white leading-snug flex-1">{a.name}</span>
-              <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
-                a.type === "google_doc"
-                  ? "bg-[#00DCC8]/15 text-[#00DCC8]"
-                  : "bg-[#F59E0B]/15 text-[#F59E0B]"
-              }`}>
-                {a.type === "google_doc" ? "Google Doc" : "HTML"}
-              </span>
-            </div>
-            <p className="font-mono text-xs text-white/40">
-              {new Date(a.created_at).toLocaleString()}
-            </p>
-            <a
-              href={a.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-auto"
+    <>
+      {/* HTML document modal */}
+      {htmlModal && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/80 backdrop-blur-sm">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#0A0F1E]">
+            <span className="text-sm font-semibold text-white">Document Preview</span>
+            <button
+              onClick={() => setHtmlModal(null)}
+              className="rounded-full p-1.5 hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+              aria-label="Close"
             >
-              <BigButton variant="primary" size="sm" className="w-full">
-                Open document ↗
-              </BigButton>
-            </a>
-          </GlassCard>
-        ))}
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <iframe
+            srcDoc={htmlModal.html}
+            sandbox=""
+            className="flex-1 w-full border-0 bg-white"
+            title="Document"
+          />
+        </div>
+      )}
+
+      <div className="flex flex-col h-full">
+        <p className="shrink-0 px-5 pt-3 pb-1 text-xs text-white/35">What the team made. Summary first.</p>
+        <div className="flex-1 overflow-y-auto p-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-4xl mx-auto">
+            {artifacts.map((a) => (
+              <GlassCard key={a.id} className="flex flex-col gap-3">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-sm font-semibold text-white leading-snug flex-1">{a.name}</span>
+                  <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
+                    a.type === "google_doc"
+                      ? "bg-[#00DCC8]/15 text-[#00DCC8]"
+                      : "bg-[#F59E0B]/15 text-[#F59E0B]"
+                  }`}>
+                    {a.type === "google_doc" ? "Google Doc" : "HTML"}
+                  </span>
+                </div>
+                <p className="font-mono text-xs text-white/40">
+                  {new Date(a.created_at).toLocaleString()}
+                </p>
+                {a.type === "google_doc" ? (
+                  <a
+                    href={a.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-auto"
+                  >
+                    <BigButton variant="primary" size="sm" className="w-full">
+                      Open document ↗
+                    </BigButton>
+                  </a>
+                ) : (
+                  <div className="mt-auto flex flex-col gap-1.5">
+                    <button
+                      onClick={() => openHtmlDoc(a.id, a.url)}
+                      disabled={htmlLoading === a.id}
+                      className="w-full"
+                    >
+                      <BigButton variant="primary" size="sm" className="w-full" disabled={htmlLoading === a.id}>
+                        {htmlLoading === a.id ? "Loading…" : "Open document"}
+                      </BigButton>
+                    </button>
+                    {htmlError?.id === a.id && (
+                      <p className="text-xs text-red-400">{htmlError.msg}</p>
+                    )}
+                  </div>
+                )}
+              </GlassCard>
+            ))}
+          </div>
+        </div>
       </div>
-      </div>
-    </div>
+    </>
   )
 }
 

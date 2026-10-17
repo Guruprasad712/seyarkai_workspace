@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -769,4 +769,25 @@ async def ask_executor(
         question_message_id=str(q_msg.id),
         answer_message_id=str(a_msg.id),
         answer=answer,
+    )
+
+
+@router.get("/artifacts/{artifact_id}")
+async def get_artifact_content(
+    artifact_id: uuid.UUID,
+    _: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Artifact).where(Artifact.id == artifact_id))
+    artifact = result.scalar_one_or_none()
+    if artifact is None or artifact.type != "html" or not artifact.html_content:
+        raise HTTPException(status_code=404, detail="artifact not found")
+    return Response(
+        content=artifact.html_content,
+        media_type="text/html",
+        headers={
+            "Content-Security-Policy": "sandbox",
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-store",
+        },
     )

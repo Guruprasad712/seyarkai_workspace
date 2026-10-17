@@ -103,6 +103,14 @@ def normalise(event: Any) -> list[dict]:
                 wrap = (meta.get("fastmcp") or {}).get("wrap_result", False)
                 structured = sc.get("result") if wrap else sc
                 if isinstance(structured, dict):
+                    # html_content is engine-internal (persisted in DB by the engine).
+                    # Strip it from structured_result so it never reaches the model
+                    # or the event log; pass it separately for the engine to consume.
+                    if "html_content" in structured:
+                        payload["_html_content"] = structured["html_content"]
+                        structured = {k: v for k, v in structured.items() if k != "html_content"}
+                        # Rebuild summary without html_content
+                        payload["summary"] = str(structured)[:500]
                     payload["structured_result"] = structured
 
             results.append({"event_type": "tool.result", "payload": payload})

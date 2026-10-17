@@ -351,23 +351,29 @@ class ExecutionEngine:
                         structured = event["payload"].get("structured_result")
                         if isinstance(structured, dict):
                             doc_id = structured.get("document_id", "")
-                            url = structured.get("url", "")
                             artifact_type = "html" if doc_id.startswith("html-") else "google_doc"
+                            artifact_row_id = uuid.uuid4()
+                            if artifact_type == "html":
+                                # URL is the authenticated serve path using the DB row id
+                                url = f"/artifacts/{artifact_row_id}"
+                            else:
+                                url = structured.get("url", "")
                             artifact_name = f"{stage.name} — {doc_id}"
                             artifact = Artifact(
-                                id=uuid.uuid4(),
+                                id=artifact_row_id,
                                 execution_id=execution_id,
                                 stage_id=stage.id,
                                 name=artifact_name,
                                 type=artifact_type,
                                 url=url,
+                                html_content=event["payload"].get("_html_content") if artifact_type == "html" else None,
                                 created_at=_now(),
                             )
                             db.add(artifact)
                             await _persist_event(
                                 db, execution_id, sid,
                                 "artifact.created", "agent",
-                                {"artifact_id": str(artifact.id), "name": artifact_name, "url": url},
+                                {"artifact_id": str(artifact_row_id), "name": artifact_name, "url": url},
                             )
                             await db.commit()
                         # Fall through — also persist the tool.result event below
@@ -375,8 +381,9 @@ class ExecutionEngine:
                     # Persist the contract event; strip internal keys, truncate agent.message
                     payload = event["payload"]
                     if event["event_type"] == "tool.result":
-                        # structured_result is engine-internal — never stored in DB
-                        payload = {k: v for k, v in payload.items() if k != "structured_result"}
+                        # structured_result and _html_content are engine-internal — never stored in DB
+                        payload = {k: v for k, v in payload.items()
+                                   if k not in ("structured_result", "_html_content")}
                     elif event["event_type"] == "agent.message":
                         payload = {"preview": event["payload"].get("text", "")[:500]}
 

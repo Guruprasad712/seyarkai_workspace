@@ -65,6 +65,7 @@ class Artifact(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     type: Mapped[str] = mapped_column(String, nullable=False)  # "google_doc" | "html"
     url: Mapped[str] = mapped_column(String, nullable=False)
+    html_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 

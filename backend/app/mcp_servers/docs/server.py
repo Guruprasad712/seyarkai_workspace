@@ -4,8 +4,8 @@ Creates a Google Doc from Markdown content using keyless impersonation of
 DOCS_SERVICE_ACCOUNT_EMAIL, then shares it with DOCS_SHARE_WITH as reader.
 
 Fallback: when Docs credentials are unavailable or the API call fails, renders
-the content as a minimal HTML file stored under backend/artifacts/ and returns
-a local URL.
+the content as HTML and returns it in the tool result dict under "html_content".
+The engine persists the HTML in the artifacts table (never on the filesystem).
 """
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ import asyncio
 import re
 import uuid
 from html import escape
-from pathlib import Path
 
 from fastmcp import FastMCP
 
@@ -21,9 +20,7 @@ from app.core.config import settings
 
 mcp = FastMCP("docs")
 
-# Artifacts directory: backend/artifacts/  (created at import time)
-_ARTIFACTS_DIR = Path(__file__).resolve().parents[3] / "artifacts"
-_ARTIFACTS_DIR.mkdir(exist_ok=True)
+_MAX_CONTENT_BYTES = 800 * 1024  # 800 KB
 
 
 # ── HTML conversion (fallback path) ─────────────────────────────────────────
@@ -341,13 +338,19 @@ def _create_google_doc(title: str, content_markdown: str) -> dict:
 # ── HTML fallback ────────────────────────────────────────────────────────────
 
 def _html_fallback(title: str, content_markdown: str) -> dict:
-    """Render content as a local HTML file and return its URL."""
+    """Render content as HTML and return it inline (stored by the engine in Postgres).
+
+    Returns {"document_id": "html-<uuid>", "html_content": "<html>..."}
+    The url is left blank — the engine sets it to /artifacts/{row.id} after DB insert.
+    """
+    if len(content_markdown.encode("utf-8")) > _MAX_CONTENT_BYTES:
+        raise ValueError(
+            f"content too large (max {_MAX_CONTENT_BYTES // 1024} KB); "
+            "summarise or split the document."
+        )
     artifact_id = str(uuid.uuid4())
-    filename = f"{artifact_id}.html"
     html = _md_to_html(title, content_markdown)
-    (_ARTIFACTS_DIR / filename).write_text(html, encoding="utf-8")
-    url = f"{settings.API_BASE_URL.rstrip('/')}/artifacts/{filename}"
-    return {"document_id": f"html-{artifact_id}", "url": url}
+    return {"document_id": f"html-{artifact_id}", "html_content": html}
 
 
 # ── Tool ─────────────────────────────────────────────────────────────────────

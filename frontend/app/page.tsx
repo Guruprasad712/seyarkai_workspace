@@ -233,7 +233,6 @@ export default function HomePage() {
             </div>
             <div className="font-heading text-2xl font-bold text-white/80 tracking-wide">Seyarkai</div>
             <p className="text-white/45 text-sm">Co-op mode for AI work.</p>
-            <p className="text-white/30 text-xs">செயற்கை · made, not born</p>
           </div>
         </div>
 
