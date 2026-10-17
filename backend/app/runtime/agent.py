@@ -105,7 +105,7 @@ def build_agent(
                         cwd=str(_BACKEND_DIR),
                         env={**os.environ},
                     ),
-                    timeout=10.0,
+                    timeout=30.0,
                 ),
             )
             toolsets.append(toolset)
