@@ -309,7 +309,7 @@ seyarkai_workspace/
 │   └── lib/               # api client, auth helpers, permissions, types
 ├── deploy/                # Cloud Run deploy scripts, cloudbuild.yaml
 ├── docs/                  # ARCHITECTURE.md, CONTRACTS.md, KNOWN_LIMITATIONS.md
-│   └── screenshots/       # add PNG screenshots here (see screenshots/README.md)
+│   └── screenshots/       # screenshots of the application (see screenshots/README.md)
 ├── .env.example           # template — copy to .env and fill in
 └── cloudbuild.yaml        # CI pipeline (build + push images only)
 ```
