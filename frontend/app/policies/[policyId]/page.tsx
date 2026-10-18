@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useCallback, useEffect, useState } from "react"
+import { use, useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { apiFetch, ApiError, extractPublishFailures } from "@/lib/api"
@@ -442,8 +442,10 @@ export default function PolicyEditorPage({
   const [publishFailures, setPublishFailures] = useState<PublishFailure[]>([])
   const [publishError, setPublishError] = useState("")
   const [addingStage, setAddingStage] = useState(false)
-  const [deleting, setDeleting]       = useState(false)
-  const [deleteError, setDeleteError] = useState("")
+  const [deleting, setDeleting]         = useState(false)
+  const [deleteError, setDeleteError]   = useState("")
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const deletedRef = useRef(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -477,6 +479,7 @@ export default function PolicyEditorPage({
   }, [policyId])
 
   const refresh = useCallback(async () => {
+    if (deletedRef.current) return
     try {
       const pol = await apiFetch<PolicyOut>(`/policies/${policyId}`)
       setPolicy(pol)
@@ -526,11 +529,12 @@ export default function PolicyEditorPage({
   const isDraft  = policy.status === "draft"
 
   async function handleDelete() {
-    if (!confirm("Delete this draft policy? This cannot be undone.")) return
     setDeleteError("")
     setDeleting(true)
+    setShowDeleteConfirm(false)
     try {
       await apiFetch(`/policies/${policyId}`, { method: "DELETE" })
+      deletedRef.current = true
       window.location.href = backHref
     } catch (err) {
       setDeleteError(err instanceof ApiError ? err.message : "Delete failed")
@@ -563,7 +567,7 @@ export default function PolicyEditorPage({
           <p className="text-xs text-white/40">You draw the line: where AI runs, where a human must say yes.</p>
         </div>
         {isDraft && can.editPolicy(user?.role ?? "") && (
-          <BigButton variant="ghost" size="md" loading={deleting} onClick={handleDelete}>
+          <BigButton variant="ghost" size="md" loading={deleting} onClick={() => setShowDeleteConfirm(true)}>
             Delete
           </BigButton>
         )}
@@ -576,6 +580,40 @@ export default function PolicyEditorPage({
           <span className="text-xs text-[#EF4444]">{deleteError}</span>
         )}
       </div>
+
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(7,10,20,0.75)", backdropFilter: "blur(8px)" }}
+          onClick={() => setShowDeleteConfirm(false)}
+        >
+          <div
+            className="glass-strong rounded-2xl px-6 py-5 w-full max-w-xs space-y-4"
+            style={{ border: "1px solid rgba(255,255,255,0.12)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <p className="font-heading font-semibold text-white text-base">Delete draft policy?</p>
+              <p className="text-sm text-white/50 mt-1">This cannot be undone. All stages and checkpoints will be removed.</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleDelete}
+                className="flex-1 py-2 rounded-xl text-sm font-semibold text-white bg-[#EF4444] hover:opacity-90 transition-opacity"
+              >
+                Delete
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 py-2 rounded-xl text-sm font-semibold text-white/70 glass hover:text-white hover:bg-white/10 transition-all border border-white/15"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Three-panel grid */}
       <div className="grid min-h-0 flex-1 grid-cols-[200px_1fr_260px] divide-x divide-white/8">
