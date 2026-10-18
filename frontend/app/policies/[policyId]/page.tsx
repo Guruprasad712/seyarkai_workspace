@@ -442,6 +442,8 @@ export default function PolicyEditorPage({
   const [publishFailures, setPublishFailures] = useState<PublishFailure[]>([])
   const [publishError, setPublishError] = useState("")
   const [addingStage, setAddingStage] = useState(false)
+  const [deleting, setDeleting]       = useState(false)
+  const [deleteError, setDeleteError] = useState("")
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -521,6 +523,20 @@ export default function PolicyEditorPage({
   const stages   = sortedStages(policy.stages)
   const finalReviewCheckpoint = policy.checkpoints.find((cp) => cp.type === "final_review")
   const backHref = projectId && wiId ? `/projects/${projectId}/work-items/${wiId}` : "/projects"
+  const isDraft  = policy.status === "draft"
+
+  async function handleDelete() {
+    if (!confirm("Delete this draft policy? This cannot be undone.")) return
+    setDeleteError("")
+    setDeleting(true)
+    try {
+      await apiFetch(`/policies/${policyId}`, { method: "DELETE" })
+      window.location.href = backHref
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : "Delete failed")
+      setDeleting(false)
+    }
+  }
   const usedVersionIds = [...new Set(stages.map((s) => s.agent_version_id))]
 
   return (
@@ -546,10 +562,18 @@ export default function PolicyEditorPage({
           </div>
           <p className="text-xs text-white/40">You draw the line: where AI runs, where a human must say yes.</p>
         </div>
-        {policy.status !== "published" && can.publishPolicy(user?.role ?? "") && (
+        {isDraft && can.editPolicy(user?.role ?? "") && (
+          <BigButton variant="ghost" size="md" loading={deleting} onClick={handleDelete}>
+            Delete
+          </BigButton>
+        )}
+        {isDraft && can.publishPolicy(user?.role ?? "") && (
           <BigButton variant="gradient" size="md" loading={publishing} onClick={handlePublish}>
             Publish
           </BigButton>
+        )}
+        {deleteError && (
+          <span className="text-xs text-[#EF4444]">{deleteError}</span>
         )}
       </div>
 

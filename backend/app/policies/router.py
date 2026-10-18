@@ -518,6 +518,18 @@ async def get_policy(
     return await _policy_out(db, policy)
 
 
+@router.delete("/policies/{policy_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_policy(
+    policy_id: str,
+    _: User = Depends(require_any("admin", "builder")),
+    db: AsyncSession = Depends(get_db),
+):
+    policy = await _load_policy(db, policy_id)
+    await _require_draft(policy)
+    await db.delete(policy)
+    await db.commit()
+
+
 # ---------------------------------------------------------------------------
 # Stage routes
 # ---------------------------------------------------------------------------
