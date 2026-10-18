@@ -331,6 +331,6 @@ seyarkai_workspace/
 
 ## Credits and license
 
-Built by **Guruprasad P** for the Google Cloud AI Builders Cup hackathon.
+Built by **Team Seyarkai** for the Google Cloud AI Builders Cup hackathon.
 
 License: MIT — see [`LICENSE`](LICENSE).
