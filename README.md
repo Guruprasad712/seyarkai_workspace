@@ -318,14 +318,14 @@ seyarkai_workspace/
 
 ## Screenshots
 
-> Add the PNG files listed in [`docs/screenshots/README.md`](docs/screenshots/README.md) to complete this gallery. The filenames below are placeholders — images must be added manually.
-
 | | | |
 |---|---|---|
-| ![Login](docs/screenshots/login.png) | ![Home](docs/screenshots/home.png) | ![Project](docs/screenshots/project.png) |
-| *Login with demo access card* | *Home dashboard* | *Project with work items* |
-| ![Work item](docs/screenshots/work-item.png) | ![Policy builder](docs/screenshots/policy-builder.png) | ![Conversation](docs/screenshots/execution-conversation.png) |
-| *Work item detail* | *Policy editor* | *Execution — Conversation tab* |
+| ![Login](docs/screenshots/login.png) | ![Home](docs/screenshots/home.png) | ![Work item](docs/screenshots/work-item.png) |
+| *Login with demo access card* | *Home dashboard* | *Work item detail* |
+| ![Policy builder](docs/screenshots/policy-builder.png) | ![Conversation](docs/screenshots/execution-conversation.png) | ![Timeline](docs/screenshots/execution-timeline.png) |
+| *Policy editor* | *Execution — Conversation tab* | *Execution — Timeline tab* |
+| ![Checkpoints](docs/screenshots/execution-checkpoints.png) | | |
+| *Execution — Checkpoints tab* | | |
 
 ---
 

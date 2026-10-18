@@ -7,7 +7,6 @@ Suggested capture order follows the demo walkthrough.
 |---|---|
 | `login.png` | Login page with demo access card visible |
 | `home.png` | Home page / dashboard |
-| `project.png` | Project detail page with work items list |
 | `work-item.png` | Work item detail with workers, policy card, and Execute button |
 | `policy-builder.png` | Policy editor showing stages and checkpoints |
 | `execution-conversation.png` | Execution page — Conversation tab with agent messages |
